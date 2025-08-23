@@ -57,6 +57,5 @@ A recipe is a TOML file describing environment variables and steps. An example c
 
 ## Future Work
 - More step types (pkg, etc)
-- mise plan, mise validate, mise verify
 - arrays for cmd in recipe.toml (maybe)
 - Windows support
