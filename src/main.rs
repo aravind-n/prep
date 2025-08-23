@@ -1,6 +1,7 @@
 mod cli;
 mod cookbook;
 mod recipe;
+mod scaffolding;
 mod utils;
 
 use std::{error::Error, path::PathBuf};
@@ -40,6 +41,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     error!(cookbook = %cookbook.config.name, "Cookbook failed");
                 })?;
             }
+        }
+        cli::Command::Init { path } => {
+            scaffolding::create_new_cookbook(&path)?;
         }
     }
 

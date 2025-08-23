@@ -20,4 +20,8 @@ pub(crate) enum Command {
         #[arg(long, default_value_t = false)]
         continue_on_error: bool,
     },
+    Init {
+        #[arg(default_value = "./my-cookbook")]
+        path: PathBuf,
+    },
 }
