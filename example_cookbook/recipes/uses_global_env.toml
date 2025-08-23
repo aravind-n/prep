@@ -1,0 +1,8 @@
+name = "uses-global-env-var"
+version = 1
+description = "This recipe uses an environment variable declared in config.toml"
+
+[[steps]]
+id = "print-global-variable"
+type = "shell"
+cmd = "echo $GLOBAL"

@@ -1,0 +1,10 @@
+name = "dependent-recipe"
+version = 1
+description = "This is a simple recipe"
+depends_on = [ "example" ]
+
+[[steps]]
+id = "first-dependent-step"
+type = "shell"
+cmd = "echo 'will only run after example recipe'"
+os = ["macos", "linux"] # you can omit this if you support both mac and linux

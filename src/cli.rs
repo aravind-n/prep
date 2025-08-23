@@ -12,21 +12,12 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
     Run {
-        path: Option<PathBuf>,
+        cookbook_path: Option<PathBuf>,
+
+        #[arg(short, long)]
+        recipe: Option<PathBuf>,
 
         #[arg(long, default_value_t = false)]
         continue_on_error: bool,
     },
-}
-
-impl Command {
-    pub(crate) fn get_recipe_path(&self) -> PathBuf {
-        match &self {
-            Command::Run { path, .. } => match path {
-                Some(p) if p.is_dir() => p.join("recipe.toml"),
-                Some(p) => p.clone(),
-                None => PathBuf::from("recipe.toml"),
-            },
-        }
-    }
 }

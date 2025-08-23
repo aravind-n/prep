@@ -1,0 +1,8 @@
+name = "example-cookbook"
+version = "1.0.0"
+description = "This is an example of what a cookbook is"
+author = "aravind"
+license = "MIT"
+
+[env]
+GLOBAL = "global"

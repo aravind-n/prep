@@ -1,5 +1,8 @@
 name = "example"
 version = 1
+description = "This is a simple recipe"
+author = "aravind"
+license = "MIT"
 
 [env]
 VARIABLE = "Value" # Raw variable
