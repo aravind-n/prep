@@ -24,4 +24,8 @@ pub(crate) enum Command {
         #[arg(default_value = "./my-cookbook")]
         path: PathBuf,
     },
+    Plan {
+        #[arg(default_value = "./")]
+        cookbook_path: PathBuf,
+    }
 }

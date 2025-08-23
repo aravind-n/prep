@@ -45,6 +45,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         cli::Command::Init { path } => {
             scaffolding::create_new_cookbook(&path)?;
         }
+        cli::Command::Plan { cookbook_path } => {
+            let cookbook = Cookbook::new(cookbook_path)?;
+            cookbook.plan()?;
+        }
     }
 
     Ok(())

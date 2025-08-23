@@ -14,6 +14,7 @@ use crate::recipe::Recipe;
 pub struct CookbookConfig {
     pub name: String,
     pub version: String,
+    pub description: Option<String>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
 }
@@ -97,13 +98,41 @@ impl Cookbook {
         Ok(graph)
     }
 
-    pub fn run(&self, continue_on_error: bool) -> Result<(), Box<dyn Error>> {
+    pub fn get_sorted_recipe_ids(&self) -> Result<Vec<u32>, Box<dyn Error>> {
         let graph = self.build_graph()?;
 
-        let sorted_recipe_ids = toposort(&graph, None).map_err(|e| {
-            error!(node = %e.node_id(), "Circular dependency detected");
+        Ok(toposort(&graph, None).map_err(|e| {
+            let node_name = self
+                .id_to_recipe
+                .get(&e.node_id())
+                .unwrap_or(&"Unknown".to_string())
+                .clone();
+
+            error!(node = %node_name, "Circular dependency detected");
             "Circular dependency detected"
-        })?;
+        })?)
+    }
+
+    pub fn plan(&self) -> Result<(), Box<dyn Error>> {
+        let sorted_recipe_ids = self.get_sorted_recipe_ids()?;
+
+        println!("Cookbook {} v{} execution plan:", self.config.name, self.config.version);
+        if let Some(description) = &self.config.description {
+            println!("Description: {description}\n")
+        }
+
+        for recipe_id in sorted_recipe_ids {
+            let recipe_name = self.id_to_recipe.get(&recipe_id).unwrap();
+            let recipe = self.recipes.get(recipe_name).unwrap();
+            recipe.plan();
+            println!();
+        }
+
+        Ok(())
+    }
+
+    pub fn run(&self, continue_on_error: bool) -> Result<(), Box<dyn Error>> {
+        let sorted_recipe_ids = self.get_sorted_recipe_ids()?;
 
         println!(
             "Building cookbook {} v{}",

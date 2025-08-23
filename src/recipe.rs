@@ -59,6 +59,7 @@ impl Step {
 #[derive(Debug, Deserialize)]
 pub struct Recipe {
     pub name: String,
+    pub description: Option<String>,
     #[serde(default)]
     pub depends_on: Vec<String>,
     #[serde(default)]
@@ -72,6 +73,34 @@ impl Recipe {
         let recipe: Recipe = toml::from_str(&raw_recipe)?;
 
         Ok(recipe)
+    }
+
+    pub fn plan(&self) {
+        let host_os = utils::host_os();
+        let mut dependencies_str = self.depends_on.join(", ");
+        if !dependencies_str.is_empty() {
+            dependencies_str = format!(" {dependencies_str} ");
+        }
+       
+        println!("-> Plan for recipe: {}", self.name);
+        println!("Depends on: [{}]", dependencies_str);
+        
+        if let Some(description) = &self.description {
+            println!("Description: {}", description);
+        }
+        
+        for step in &self.steps {
+            match step {
+                Step::Shell { id, .. } => {
+                    if !step.supports_os(host_os) {
+                        println!("- Step: {id} skipped (mismatched os)");
+                        continue;
+                    }
+
+                    println!("- Step: {id}");
+                }
+            }
+        }
     }
 
     pub fn run(
