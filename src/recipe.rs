@@ -81,14 +81,14 @@ impl Recipe {
         if !dependencies_str.is_empty() {
             dependencies_str = format!(" {dependencies_str} ");
         }
-       
+
         println!("-> Plan for recipe: {}", self.name);
         println!("Depends on: [{}]", dependencies_str);
-        
+
         if let Some(description) = &self.description {
             println!("Description: {}", description);
         }
-        
+
         for step in &self.steps {
             match step {
                 Step::Shell { id, .. } => {

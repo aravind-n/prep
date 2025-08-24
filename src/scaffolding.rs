@@ -10,7 +10,7 @@ pub fn create_new_cookbook(path: &Path) -> Result<(), Box<dyn Error>> {
         return Err("Directory already exists".into());
     }
 
-    let cookbook_name = format!("{}", path.display());
+    let cookbook_name = path.file_name().unwrap().to_str().unwrap().to_string();
     info!("Initializing new cookbook at '{}'", cookbook_name);
 
     // Create the main cookbook directory

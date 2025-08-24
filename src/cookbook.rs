@@ -116,7 +116,10 @@ impl Cookbook {
     pub fn plan(&self) -> Result<(), Box<dyn Error>> {
         let sorted_recipe_ids = self.get_sorted_recipe_ids()?;
 
-        println!("Cookbook {} v{} execution plan:", self.config.name, self.config.version);
+        println!(
+            "Cookbook {} v{} execution plan:",
+            self.config.name, self.config.version
+        );
         if let Some(description) = &self.config.description {
             println!("Description: {description}\n")
         }
