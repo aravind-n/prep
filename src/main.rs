@@ -2,9 +2,10 @@ mod cli;
 mod cookbook;
 mod recipe;
 mod scaffolding;
+mod step;
 mod utils;
 
-use std::{error::Error, path::PathBuf};
+use std::{env, error::Error, fs, path::PathBuf};
 
 use clap::Parser;
 use tracing::error;
@@ -34,12 +35,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                     error!(recipe = recipe.name, "Recipe failed");
                 })?;
             } else if let Some(cookbook_path) = cookbook_path {
+                // Set current dir to cookbook_path
+                let prev_dir = env::current_dir()?;
+                let cookbook_path = fs::canonicalize(cookbook_path)?;
+                env::set_current_dir(&cookbook_path)?;
+
+                // Run cookbook
                 let cookbook = Cookbook::new(cookbook_path)?;
 
                 cookbook.run(continue_on_error).inspect_err(|_| {
                     eprintln!("Cookbook {} failed", cookbook.config.name);
                     error!(cookbook = %cookbook.config.name, "Cookbook failed");
                 })?;
+
+                // Restore current_dir
+                env::set_current_dir(prev_dir)?;
             }
         }
         cli::Command::Init { path } => {

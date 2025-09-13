@@ -1,0 +1,11 @@
+name = "{}"
+version = "0.1.0"
+description = "Description of what this cookbook does"
+author = "Your Name"
+license = "MIT"
+
+[env]
+# Add global environment variables here
+SCRIPTS = "$PWD/scripts"
+TEMPLATES = "$PWD/templates"
+ASSETS = "$PWD/assets"

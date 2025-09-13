@@ -1,60 +1,9 @@
-use std::{collections::BTreeMap, error::Error, path::PathBuf, process::Command};
+use std::{collections::BTreeMap, error::Error, path::PathBuf};
 
 use serde::Deserialize;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
-use crate::utils;
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-pub enum Step {
-    #[serde(rename = "shell")]
-    Shell {
-        id: String,
-        #[serde(default)]
-        os: Vec<String>, // ["macos"] | ["linux"]
-        cmd: String,
-    },
-}
-
-impl Step {
-    pub fn supports_os(&self, host_os: &str) -> bool {
-        match self {
-            Step::Shell { os, .. } => os.is_empty() || os.iter().any(|o| o == host_os),
-        }
-    }
-
-    fn expand_env(s: &str) -> String {
-        shellexpand::env(s).unwrap_or_else(|_| s.into()).into()
-    }
-
-    fn execute_shell_command(
-        id: &str,
-        cmd: &str,
-        env_vars: &BTreeMap<String, String>,
-    ) -> Result<(), Box<dyn Error>> {
-        let expanded_cmd = Self::expand_env(cmd);
-
-        let mut command = Command::new("/bin/sh");
-        command.arg("-c").arg(expanded_cmd);
-
-        for (k, v) in env_vars {
-            let expanded_value = shellexpand::env(v).unwrap().to_string();
-            command.env(k, expanded_value);
-        }
-
-        let status = command.status().inspect_err(|e| {
-            error!(error = %e, step_id = %id, "Error encountered when spawning {cmd}");
-        })?;
-
-        if !status.success() {
-            error!(step_id = %id, cmd = %cmd, "Error encountered when running {cmd}");
-            return Err("Failed to execute cmd".into());
-        }
-
-        Ok(())
-    }
-}
+use crate::{step::Step, utils};
 
 #[derive(Debug, Deserialize)]
 pub struct Recipe {
@@ -83,21 +32,21 @@ impl Recipe {
         }
 
         println!("-> Plan for recipe: {}", self.name);
-        println!("Depends on: [{}]", dependencies_str);
+        println!("   Depends on: [{}]", dependencies_str);
 
         if let Some(description) = &self.description {
-            println!("Description: {}", description);
+            println!("   Description: {}", description);
         }
 
         for step in &self.steps {
             match step {
                 Step::Shell { id, .. } => {
                     if !step.supports_os(host_os) {
-                        println!("- Step: {id} skipped (mismatched os)");
+                        println!("    - \x1b[33m[SKIP]\x1b[0m Step: {id} (mismatched os)");
                         continue;
                     }
 
-                    println!("- Step: {id}");
+                    println!("    - Step: {id}");
                 }
             }
         }

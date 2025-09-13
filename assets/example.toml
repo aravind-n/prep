@@ -1,0 +1,34 @@
+name = "example"
+description = "An example recipe"
+author = "mise"
+depends_on = [] # names of any upstream dependencies
+
+[env]
+MSG = "Hello, World!"
+
+[[steps]]
+id = "hello-world"
+description = "Prints a greeting to the console"
+type = "shell"
+cmd = "echo $MSG"
+
+[[steps]]
+id = "macos-only-step"
+description = "Prints the device specs on macos"
+type = "shell"
+cmd = "echo $(sw_vers -productName) $(sw_vers -productVersion)"
+os = ["macos"]
+
+[[steps]]
+id = "linux-only-step"
+description = "Prints the device specs on linux"
+type = "shell"
+cmd = "lsb_release -ds"
+os = ["linux"]
+
+[[steps]]
+id = "windows-only-step"
+description = "Prints the device specs on windows"
+type = "shell"
+cmd = "echo 'Windows support not yet implemented'"
+os = ["windows"]
