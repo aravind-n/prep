@@ -1,3 +1,9 @@
+//! Defines a [`Recipe`], which describes a sequence of steps
+//! (e.g., shell commands) to execute, along with metadata like
+//! dependencies, environment variables, and description.
+//!
+//! Recipes are typically loaded from TOML files and executed in order.
+
 use std::{collections::BTreeMap, error::Error, path::PathBuf};
 
 use serde::Deserialize;
@@ -5,6 +11,10 @@ use tracing::{info, warn};
 
 use crate::{step::Step, utils};
 
+/// A recipe describing a sequence of steps and associated metadata.
+///
+/// Recipe can be executed via [`run`](Recipe::run) or displayed as
+/// a plan via [`plan`](Recipe::plan).
 #[derive(Debug, Deserialize)]
 pub struct Recipe {
     pub name: String,
@@ -17,6 +27,11 @@ pub struct Recipe {
 }
 
 impl Recipe {
+    /// Loads a recipe from a TOML file at the given `recipe_path`.
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be read or the TOML cannot
+    /// be deserialized into a [`Recipe`].
     pub fn new(recipe_path: PathBuf) -> Result<Self, Box<dyn Error>> {
         let raw_recipe = std::fs::read_to_string(&recipe_path)?;
         let recipe: Recipe = toml::from_str(&raw_recipe)?;
@@ -24,6 +39,7 @@ impl Recipe {
         Ok(recipe)
     }
 
+    /// Prints a plan of the recipe to stdout, without executing any steps.
     pub fn plan(&self) {
         let host_os = utils::host_os();
         let mut dependencies_str = self.depends_on.join(", ");
@@ -52,6 +68,25 @@ impl Recipe {
         }
     }
 
+    /// Runs the recipe, executing its steps sequentially.
+    ///
+    /// Each step’s shell command is executed with environment variables
+    /// merged from:
+    /// - Global cookbook environment (if provided), and
+    /// - This recipe’s own `env` map.
+    ///
+    /// Steps that don’t support the current OS (see [`Step::supports_os`])
+    /// are skipped with a warning.
+    ///
+    /// # Parameters
+    /// - `continue_on_error`: If `true`, execution continues after a failed step.
+    ///   Otherwise, execution stops on the first error.
+    /// - `cookbook_env_vars`: Optional environment variables inherited from
+    ///   the cookbook.
+    ///
+    /// # Errors
+    /// Returns the error from the first failed step if `continue_on_error` is `false`.
+    /// Also returns errors for underlying I/O or process failures.
     pub fn run(
         &self,
         continue_on_error: bool,

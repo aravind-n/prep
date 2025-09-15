@@ -1,3 +1,5 @@
+//! Scaffolding utilities for creating a new cookbook on disk.
+
 use std::{
     error::Error,
     fs,
@@ -7,6 +9,20 @@ use std::{
 
 use tracing::{error, info};
 
+/// Creates a new cookbook directory structure at the given `path`.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The target path already exists,
+/// - Any filesystem operation fails (creating directories, writing files, setting permissions),
+/// - `git init` fails to execute or returns a non‐zero exit status.
+///
+/// # Side effects
+///
+/// - Creates and writes files/directories on the local filesystem.
+/// - Executes the `git` command if available on `PATH`.
+/// - On Unix platforms, sets executable permission (`0o755`) on `scripts/example-script.sh`.
 pub fn create_new_cookbook(path: &Path) -> Result<(), Box<dyn Error>> {
     if path.exists() {
         error!("Directory {} already exists", path.display());
@@ -83,6 +99,11 @@ pub fn create_new_cookbook(path: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Performs simple template substitution by replacing `{}` with `var`.
+///
+/// # Parameters
+/// - `contents`: The template string containing `{}` as a placeholder.
+/// - `var`: The replacement value (typically the cookbook name).
 fn build_template(contents: &str, var: &str) -> String {
     contents.replace("{}", var)
 }

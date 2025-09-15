@@ -12,6 +12,8 @@ use tracing::error;
 
 use crate::{cli::Cli, cookbook::Cookbook, recipe::Recipe};
 
+/// Handles all CLI command variants expected by the program
+/// and delegates execution
 fn main() -> Result<(), Box<dyn Error>> {
     utils::init_tracing();
 
@@ -44,8 +46,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let cookbook = Cookbook::new(cookbook_path)?;
 
                 cookbook.run(continue_on_error).inspect_err(|_| {
-                    eprintln!("Cookbook {} failed", cookbook.config.name);
-                    error!(cookbook = %cookbook.config.name, "Cookbook failed");
+                    eprintln!("Cookbook {} failed", cookbook.name);
+                    error!(cookbook = %cookbook.name, "Cookbook failed");
                 })?;
 
                 // Restore current_dir
