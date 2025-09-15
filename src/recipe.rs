@@ -135,3 +135,199 @@ impl Recipe {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn write_recipe_toml(dir: &tempfile::TempDir, toml_src: &str) -> PathBuf {
+        let p = dir.path().join("recipe.toml");
+        std::fs::write(&p, toml_src).expect("write recipe");
+        p
+    }
+
+    #[test]
+    fn recipe_new_loads_from_toml() {
+        let td = tempdir().unwrap();
+        let toml_src = r#"
+            name = "example"
+            description = "demo"
+            depends_on = ["a","b"]
+            [env]
+            FOO = "bar"
+
+            [[steps]]
+            type = "shell"
+            id = "noop"
+            cmd = "true"
+        "#;
+        let path = write_recipe_toml(&td, toml_src);
+
+        let r = Recipe::new(path).expect("should parse");
+        assert_eq!(r.name, "example");
+        assert_eq!(r.description.as_deref(), Some("demo"));
+        assert_eq!(r.depends_on, vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(r.env.get("FOO").map(|s| s.as_str()), Some("bar"));
+        assert_eq!(r.steps.len(), 1);
+        match &r.steps[0] {
+            Step::Shell { id, cmd, .. } => {
+                assert_eq!(id, "noop");
+                assert_eq!(cmd, "true");
+            }
+        }
+    }
+
+    #[test]
+    fn plan_smoke_test_does_not_panic() {
+        let r = Recipe {
+            name: "planme".into(),
+            description: Some("desc".into()),
+            depends_on: vec!["one".into()],
+            env: BTreeMap::new(),
+            steps: vec![Step::Shell {
+                id: "s1".into(),
+                os: vec![utils::host_os().into()],
+                cmd: "true".into(),
+            }],
+        };
+        r.plan(); // ensure no panic
+    }
+
+    // The `run` method uses /bin/sh, so limit these to Unix.
+    #[cfg(unix)]
+    mod unix_run {
+        use super::*;
+
+        #[test]
+        fn run_executes_steps_successfully() {
+            let r = Recipe {
+                name: "ok".into(),
+                description: None,
+                depends_on: vec![],
+                env: BTreeMap::new(),
+                steps: vec![
+                    Step::Shell {
+                        id: "s1".into(),
+                        os: vec![utils::host_os().into()],
+                        cmd: "true".into(),
+                    },
+                    Step::Shell {
+                        id: "s2".into(),
+                        os: vec![utils::host_os().into()],
+                        cmd: "true".into(),
+                    },
+                ],
+            };
+
+            r.run(false, None).expect("all steps should succeed");
+        }
+
+        #[test]
+        fn env_is_merged_and_visible_in_step() {
+            // cookbook provides A=one, recipe overrides/extends with B=two
+            let mut cookbook_env = BTreeMap::new();
+            cookbook_env.insert("A".into(), "one".into());
+
+            let mut recipe_env = BTreeMap::new();
+            recipe_env.insert("B".into(), "two".into());
+            // also ensure recipe can override cookbook
+            recipe_env.insert("A".into(), "override".into());
+
+            // Succeeds only if A=override and B=two in the shell
+            let cmd = r#"[ "${A:-}" = "override" ] && [ "${B:-}" = "two" ]"#;
+
+            let r = Recipe {
+                name: "env".into(),
+                description: None,
+                depends_on: vec![],
+                env: recipe_env,
+                steps: vec![Step::Shell {
+                    id: "check".into(),
+                    os: vec![utils::host_os().into()],
+                    cmd: cmd.into(),
+                }],
+            };
+
+            r.run(false, Some(cookbook_env))
+                .expect("env merge should be visible");
+        }
+
+        #[test]
+        fn os_mismatch_is_skipped_not_error() {
+            // Choose an OS name that is definitely *not* the current one.
+            let current = utils::host_os();
+            let other = match current {
+                "linux" => "macos",
+                "macos" => "windows",
+                _ => "linux",
+            }
+            .to_string();
+
+            let r = Recipe {
+                name: "skip".into(),
+                description: None,
+                depends_on: vec![],
+                env: BTreeMap::new(),
+                steps: vec![Step::Shell {
+                    id: "s1".into(),
+                    os: vec![other],
+                    cmd: "exit 42".into(),
+                }],
+            };
+
+            // Should not run, therefore should not fail.
+            r.run(false, None).expect("mismatched OS steps are skipped");
+        }
+
+        #[test]
+        fn continue_on_error_true_runs_remaining_steps() {
+            let r = Recipe {
+                name: "cont".into(),
+                description: None,
+                depends_on: vec![],
+                env: BTreeMap::new(),
+                steps: vec![
+                    Step::Shell {
+                        id: "fail".into(),
+                        os: vec![utils::host_os().into()],
+                        cmd: "exit 2".into(),
+                    },
+                    Step::Shell {
+                        id: "ok".into(),
+                        os: vec![utils::host_os().into()],
+                        cmd: "true".into(),
+                    },
+                ],
+            };
+
+            // Should NOT return Err because continue_on_error = true
+            r.run(true, None).expect("continues after failure");
+        }
+
+        #[test]
+        fn continue_on_error_false_stops_on_first_error() {
+            let r = Recipe {
+                name: "stop".into(),
+                description: None,
+                depends_on: vec![],
+                env: BTreeMap::new(),
+                steps: vec![
+                    Step::Shell {
+                        id: "fail".into(),
+                        os: vec![utils::host_os().into()],
+                        cmd: "exit 3".into(),
+                    },
+                    Step::Shell {
+                        id: "should_not_run".into(),
+                        os: vec![utils::host_os().into()],
+                        cmd: "true".into(),
+                    },
+                ],
+            };
+
+            let err = r.run(false, None).expect_err("should stop on first error");
+            assert!(!format!("{err}").is_empty());
+        }
+    }
+}

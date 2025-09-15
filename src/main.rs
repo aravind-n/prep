@@ -1,7 +1,6 @@
 mod cli;
 mod cookbook;
 mod recipe;
-mod scaffolding;
 mod step;
 mod utils;
 
@@ -55,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         cli::Command::Init { path } => {
-            scaffolding::create_new_cookbook(&path)?;
+            utils::create_new_cookbook(&path)?;
         }
         cli::Command::Plan { cookbook_path } => {
             let cookbook = Cookbook::new(cookbook_path)?;

@@ -19,7 +19,7 @@ use tracing::{error, info};
 use crate::recipe::Recipe;
 
 /// Configuration metadata for a cookbook, loaded from `config.toml`.
-/// 
+///
 /// This is a helper struct used to initialize a cookbook
 #[derive(Debug, Deserialize)]
 struct CookbookConfig {
@@ -48,7 +48,7 @@ pub struct Cookbook {
 }
 
 /// Internal alias for a recipe map tuple.
-/// 
+///
 /// Used to reduce code clutter.
 type RecipeMaps = (
     BTreeMap<String, Recipe>,
@@ -179,10 +179,7 @@ impl Cookbook {
     pub fn plan(&self) -> Result<(), Box<dyn Error>> {
         let sorted_recipe_ids = self.get_sorted_recipe_ids()?;
 
-        println!(
-            "{} v{} execution plan:",
-            self.name, self.version
-        );
+        println!("{} v{} execution plan:", self.name, self.version);
         if let Some(description) = &self.description {
             println!("Description: {description}\n")
         }
@@ -212,10 +209,7 @@ impl Cookbook {
     pub fn run(&self, continue_on_error: bool) -> Result<(), Box<dyn Error>> {
         let sorted_recipe_ids = self.get_sorted_recipe_ids()?;
 
-        println!(
-            "Building cookbook {} v{}",
-            self.name, self.version
-        );
+        println!("Building cookbook {} v{}", self.name, self.version);
         info!(cookbook = %self.name, "Starting cookbook execution");
 
         for recipe_id in sorted_recipe_ids {
@@ -229,5 +223,212 @@ impl Cookbook {
         info!(cookbook = %self.name, "Cookbook executed successfully");
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    // Escape a Rust string for TOML basic string context.
+    fn toml_basic_escape(s: &str) -> String {
+        s.replace('\\', "\\\\").replace('"', "\\\"")
+    }
+
+    /// Create a temp cookbook on disk with a config and N recipes.
+    ///
+    /// - `name`/`version` go into config.toml
+    /// - `extra_env` goes under [env] in config.toml (e.g., OUTPUT path)
+    /// - `recipes` is (file_stem, depends_on, cmd)
+    fn write_cookbook(
+        name: &str,
+        version: &str,
+        extra_env: &[(&str, &str)],
+        recipes: &[(&str, &[&str], &str)],
+    ) -> tempfile::TempDir {
+        let td = tempdir().expect("tempdir");
+        let root = td.path();
+
+        // config.toml
+        let mut config = format!(
+            r#"
+name = "{name}"
+version = "{version}"
+description = "test cookbook"
+[env]
+"#
+        );
+        for (k, v) in extra_env {
+            config.push_str(&format!(r#"{k} = "{}""#, toml_basic_escape(v)));
+            config.push('\n');
+        }
+        fs::write(root.join("config.toml"), config).unwrap();
+
+        // recipes/
+        let recipes_dir = root.join("recipes");
+        fs::create_dir_all(&recipes_dir).unwrap();
+
+        for (file_stem, deps, cmd) in recipes {
+            let mut toml_src = String::new();
+            toml_src.push_str(&format!(r#"name = "{file_stem}""#));
+            toml_src.push('\n');
+
+            if !deps.is_empty() {
+                toml_src.push_str("depends_on = [");
+                for (i, d) in deps.iter().enumerate() {
+                    if i > 0 {
+                        toml_src.push_str(", ");
+                    }
+                    toml_src.push('"');
+                    toml_src.push_str(d);
+                    toml_src.push('"');
+                }
+                toml_src.push_str("]\n");
+            }
+
+            toml_src.push_str(
+                r#"
+[[steps]]
+type = "shell"
+"#,
+            );
+            toml_src.push_str(&format!(r#"id = "step-{file_stem}""#));
+            toml_src.push('\n');
+
+            // 🔧 Escape the command for TOML basic string
+            let cmd_escaped = toml_basic_escape(cmd);
+            toml_src.push_str(&format!(r#"cmd = "{}""#, cmd_escaped));
+            toml_src.push('\n');
+
+            fs::write(recipes_dir.join(format!("{file_stem}.toml")), toml_src).unwrap();
+        }
+
+        td
+    }
+
+    #[test]
+    fn new_loads_config_and_recipes() {
+        let td = write_cookbook(
+            "demo",
+            "0.1.0",
+            &[("FOO", "BAR")],
+            &[("a", &[], "true"), ("b", &["a"], "true")],
+        );
+
+        let cb = Cookbook::new(td.path().to_path_buf()).expect("load cookbook");
+        assert_eq!(cb.name, "demo");
+        assert_eq!(cb.version, "0.1.0");
+        assert_eq!(cb.description.as_deref(), Some("test cookbook"));
+        assert_eq!(cb.env.get("FOO").map(|s| s.as_str()), Some("BAR"));
+        assert_eq!(cb.recipes.len(), 2);
+        assert!(cb.recipes.contains_key("a"));
+        assert!(cb.recipes.contains_key("b"));
+    }
+
+    #[test]
+    fn sorted_ids_respect_dependencies_linear_chain() {
+        // a -> b -> c
+        let td = write_cookbook(
+            "sort",
+            "1.0",
+            &[],
+            &[
+                ("a", &[], "true"),
+                ("b", &["a"], "true"),
+                ("c", &["b"], "true"),
+            ],
+        );
+        let cb = Cookbook::new(td.path().to_path_buf()).unwrap();
+
+        let order = cb.get_sorted_recipe_ids().expect("toposort ok");
+
+        // Map ids back to names (tests are in-module, so we can read private fields)
+        let names: Vec<String> = order
+            .into_iter()
+            .map(|id| cb.id_to_recipe.get(&id).unwrap().clone())
+            .collect();
+
+        assert!(names.windows(2).any(|w| w == ["a", "b"]), "b after a");
+        assert!(names.windows(2).any(|w| w == ["b", "c"]), "c after b");
+        // Ensure 'a' appears before 'c' as well
+        let pos = |s: &str| names.iter().position(|n| n == s).unwrap();
+        assert!(pos("a") < pos("b"));
+        assert!(pos("b") < pos("c"));
+    }
+
+    #[test]
+    fn missing_dependency_errors() {
+        let td = write_cookbook(
+            "missing-dep",
+            "1.0",
+            &[],
+            &[("a", &["does-not-exist"], "true")],
+        );
+        let cb = Cookbook::new(td.path().to_path_buf()).unwrap();
+        let err = cb
+            .get_sorted_recipe_ids()
+            .expect_err("should error on missing dep");
+        assert!(!format!("{err}").is_empty());
+    }
+
+    #[test]
+    fn circular_dependency_detected() {
+        // a -> b, b -> a
+        let td = write_cookbook(
+            "cycle",
+            "1.0",
+            &[],
+            &[("a", &["b"], "true"), ("b", &["a"], "true")],
+        );
+        let cb = Cookbook::new(td.path().to_path_buf()).unwrap();
+        let err = cb
+            .get_sorted_recipe_ids()
+            .expect_err("should error on cycle");
+        assert!(!format!("{err}").is_empty());
+    }
+
+    #[test]
+    fn plan_smoke_test() {
+        let td = write_cookbook(
+            "plan",
+            "1.0",
+            &[],
+            &[("a", &[], "true"), ("b", &["a"], "true")],
+        );
+        let cb = Cookbook::new(td.path().to_path_buf()).unwrap();
+        cb.plan().expect("plan should succeed");
+    }
+
+    // The run path shells out with /bin/sh; make this Unix-only.
+    #[cfg(unix)]
+    #[test]
+    fn run_executes_in_dependency_order_and_passes_env() {
+        // We'll set OUTPUT in config.env so steps can append their letter there.
+        let td = tempdir().unwrap();
+        let out_file = td.path().join("out.txt");
+        let out_str = out_file.to_string_lossy().into_owned();
+
+        // Build cookbook where:
+        // a: append "A"
+        // b (depends on a): append "B"
+        // c (depends on b): append "C"
+        let cookdir = write_cookbook(
+            "runit",
+            "1.0",
+            &[("OUTPUT", &out_str)],
+            &[
+                ("a", &[], r#"printf "A" >> "$OUTPUT""#),
+                ("b", &["a"], r#"printf "B" >> "$OUTPUT""#),
+                ("c", &["b"], r#"printf "C" >> "$OUTPUT""#),
+            ],
+        );
+
+        let cb = Cookbook::new(cookdir.path().to_path_buf()).unwrap();
+        cb.run(false).expect("run should succeed");
+
+        let contents = fs::read_to_string(out_file).expect("read out");
+        assert_eq!(contents, "ABC");
     }
 }
