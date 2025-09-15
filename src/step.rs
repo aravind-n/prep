@@ -88,8 +88,9 @@ impl Step {
         cmd: &str,
         env_vars: &BTreeMap<String, String>,
     ) -> Result<(), Box<dyn Error>> {
+        let expanded_cmd = Step::expand_with_cwd(cmd);
         let mut command = Command::new("/bin/sh");
-        command.arg("-c").arg(cmd);
+        command.arg("-c").arg(expanded_cmd);
 
         for (k, v) in env_vars {
             let expanded_value = Step::expand_with_cwd(v);
