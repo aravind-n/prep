@@ -1,0 +1,137 @@
+workflow:
+  rules:
+    # Run pipelines for Merge Requests
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    # Run pipelines for the default branch (e.g., master/main)
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # Run pipelines for tags (needed for releases)
+    - if: $CI_COMMIT_TAG
+    # Otherwise, don't create a pipeline
+    - when: never
+
+stages:
+  - lint
+  - build
+  - test
+  - package
+  - release
+
+variables:
+  RUST_IMAGE: ${RUST_IMAGE:-rust:1.90-slim}
+
+# -------------------- LINT --------------------
+
+format-check:
+  stage: lint
+  image: $RUST_IMAGE
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - rustup component add rustfmt
+    - cargo fmt --all -- --check
+
+clippy-check:
+  stage: lint
+  image: $RUST_IMAGE
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - rustup component add clippy
+    - cargo clippy --locked --all-targets --all-features -- -D warnings
+
+# -------------------- BUILD (matrix) --------------------
+
+build:
+  stage: build
+  image: $RUST_IMAGE
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+  variables:
+    TARGET: x86_64-unknown-linux-gnu
+  script:
+    - rustup target add $TARGET
+    - cargo build --locked --workspace --release --target $TARGET
+  artifacts:
+    paths:
+      - target/$TARGET/release/mise
+    expire_in: 1 week
+
+# -------------------- TEST --------------------
+
+test:
+  stage: test
+  image: $RUST_IMAGE
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - cargo test --locked --workspace
+
+# -------------------- PACKAGE (tar + upload to Package Registry) --------------------
+
+# Guard script to ensure the tag commit is on the default branch.
+.release_guard: &release_guard |
+  git fetch --depth=200 origin "$CI_DEFAULT_BRANCH"
+  if ! git merge-base --is-ancestor "$CI_COMMIT_SHA" "origin/$CI_DEFAULT_BRANCH"; then
+    echo "Tag $CI_COMMIT_TAG is not on $CI_DEFAULT_BRANCH; skipping release."
+    exit 1
+  fi
+
+# We’ll upload to the Generic Package Registry with CI_JOB_TOKEN.
+# Docs: https://docs.gitlab.com/user/packages/generic_packages/
+.package_vars: &package_vars
+  PACKAGE_NAME: "mise"
+  PACKAGE_VERSION: "$CI_COMMIT_TAG"
+  PACKAGE_BASE_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${PACKAGE_VERSION}"
+
+package-linux:
+  stage: package
+  image: $RUST_IMAGE
+  needs:
+    - job: build
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_TAG
+  variables:
+    <<: *package_vars
+  script:
+    - *release_guard
+    - mkdir -p dist
+    - tar -C target/x86_64-unknown-linux-gnu/release -czvf "dist/mise-${CI_COMMIT_TAG}-linux-x64.tar.gz" mise
+    - >
+      curl --fail --location
+      --header "JOB-TOKEN: ${CI_JOB_TOKEN}"
+      --upload-file "dist/mise-${CI_COMMIT_TAG}-linux-x64.tar.gz"
+      "${PACKAGE_BASE_URL}/mise-${CI_COMMIT_TAG}-linux-x64.tar.gz"
+  artifacts:
+    paths:
+      - dist/mise-${CI_COMMIT_TAG}-linux-x64.tar.gz
+    expire_in: 1 week
+
+# -------------------- RELEASE (create GitLab Release with links) --------------------
+
+release-create:
+  stage: release
+  image: $RUST_IMAGE
+  needs:
+    - job: package-linux
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_TAG
+  variables:
+    <<: *package_vars
+  script:
+    - *release_guard
+    - echo "Creating GitLab Release for ${CI_COMMIT_TAG}"
+  release:
+    name: "Release $CI_COMMIT_TAG"
+    tag_name: "$CI_COMMIT_TAG"
+    description: "Release for version $CI_COMMIT_TAG"
+    assets:
+      links:
+        - name: "Linux x64"
+          url: "${PACKAGE_BASE_URL}/mise-${CI_COMMIT_TAG}-linux-x64.tar.gz"
