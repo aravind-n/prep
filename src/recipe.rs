@@ -55,16 +55,15 @@ impl Recipe {
         }
 
         for step in &self.steps {
-            match step {
-                Step::Shell { id, .. } => {
-                    if !step.supports_os(host_os) {
-                        println!("    - \x1b[33m[SKIP]\x1b[0m Step: {id} (mismatched os)");
-                        continue;
-                    }
-
-                    println!("    - Step: {id}");
-                }
+            if !step.supports_os(host_os) {
+                println!(
+                    "    - \x1b[33m[SKIP]\x1b[0m Step: {} (mismatched os)",
+                    step.name
+                );
+                continue;
             }
+
+            println!("    - Step: {}", step.name);
         }
     }
 
@@ -107,23 +106,19 @@ impl Recipe {
         println!("\n=> Running recipe {}", self.name);
 
         for step in &self.steps {
-            match step {
-                Step::Shell { id, cmd, .. } => {
-                    if !step.supports_os(host_os) {
-                        warn!(step_id = %id, "step skipped (mismatched os)");
-                        continue;
-                    }
+            if !step.supports_os(host_os) {
+                warn!(step = %step.name, "step skipped (mismatched os)");
+                continue;
+            }
 
-                    println!("\n==> step {id}");
+            println!("\n==> step {}", step.name);
 
-                    match Step::execute_shell_command(id, cmd, &env_vars) {
-                        Ok(_) => (),
-                        Err(e) => {
-                            eprintln!("==> step {id} failed\n");
-                            if !continue_on_error {
-                                return Err(e);
-                            }
-                        }
+            match step.run(Some(&env_vars)) {
+                Ok(_) => (),
+                Err(e) => {
+                    eprintln!("==> step {} failed\n", step.name);
+                    if !continue_on_error {
+                        return Err(e);
                     }
                 }
             }
@@ -158,8 +153,7 @@ mod tests {
             FOO = "bar"
 
             [[steps]]
-            type = "shell"
-            id = "noop"
+            name = "noop"
             cmd = "true"
         "#;
         let path = write_recipe_toml(&td, toml_src);
@@ -170,12 +164,8 @@ mod tests {
         assert_eq!(r.depends_on, vec!["a".to_string(), "b".to_string()]);
         assert_eq!(r.env.get("FOO").map(|s| s.as_str()), Some("bar"));
         assert_eq!(r.steps.len(), 1);
-        match &r.steps[0] {
-            Step::Shell { id, cmd, .. } => {
-                assert_eq!(id, "noop");
-                assert_eq!(cmd, "true");
-            }
-        }
+        assert_eq!(r.steps[0].name, "noop");
+        assert_eq!(r.steps[0].cmd, "true");
     }
 
     #[test]
@@ -185,10 +175,10 @@ mod tests {
             description: Some("desc".into()),
             depends_on: vec!["one".into()],
             env: BTreeMap::new(),
-            steps: vec![Step::Shell {
-                id: "s1".into(),
-                os: vec![utils::host_os().into()],
+            steps: vec![Step {
+                name: "s1".into(),
                 cmd: "true".into(),
+                os: vec![utils::host_os().into()],
             }],
         };
         r.plan(); // ensure no panic
@@ -207,15 +197,15 @@ mod tests {
                 depends_on: vec![],
                 env: BTreeMap::new(),
                 steps: vec![
-                    Step::Shell {
-                        id: "s1".into(),
-                        os: vec![utils::host_os().into()],
+                    Step {
+                        name: "s1".into(),
                         cmd: "true".into(),
+                        os: vec![utils::host_os().into()],
                     },
-                    Step::Shell {
-                        id: "s2".into(),
-                        os: vec![utils::host_os().into()],
+                    Step {
+                        name: "s2".into(),
                         cmd: "true".into(),
+                        os: vec![utils::host_os().into()],
                     },
                 ],
             };
@@ -242,10 +232,10 @@ mod tests {
                 description: None,
                 depends_on: vec![],
                 env: recipe_env,
-                steps: vec![Step::Shell {
-                    id: "check".into(),
-                    os: vec![utils::host_os().into()],
+                steps: vec![Step {
+                    name: "check".into(),
                     cmd: cmd.into(),
+                    os: vec![utils::host_os().into()],
                 }],
             };
 
@@ -269,8 +259,8 @@ mod tests {
                 description: None,
                 depends_on: vec![],
                 env: BTreeMap::new(),
-                steps: vec![Step::Shell {
-                    id: "s1".into(),
+                steps: vec![Step {
+                    name: "s1".into(),
                     os: vec![other],
                     cmd: "exit 42".into(),
                 }],
@@ -288,13 +278,13 @@ mod tests {
                 depends_on: vec![],
                 env: BTreeMap::new(),
                 steps: vec![
-                    Step::Shell {
-                        id: "fail".into(),
+                    Step {
+                        name: "fail".into(),
                         os: vec![utils::host_os().into()],
                         cmd: "exit 2".into(),
                     },
-                    Step::Shell {
-                        id: "ok".into(),
+                    Step {
+                        name: "ok".into(),
                         os: vec![utils::host_os().into()],
                         cmd: "true".into(),
                     },
@@ -313,13 +303,13 @@ mod tests {
                 depends_on: vec![],
                 env: BTreeMap::new(),
                 steps: vec![
-                    Step::Shell {
-                        id: "fail".into(),
+                    Step {
+                        name: "fail".into(),
                         os: vec![utils::host_os().into()],
                         cmd: "exit 3".into(),
                     },
-                    Step::Shell {
-                        id: "should_not_run".into(),
+                    Step {
+                        name: "should_not_run".into(),
                         os: vec![utils::host_os().into()],
                         cmd: "true".into(),
                     },

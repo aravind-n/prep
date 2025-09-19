@@ -7,8 +7,7 @@ depends_on = ["example"] # We want to run this after the first greeting
 RECIPE_MSG = "Invoked inside script"
 
 [[steps]]
-id = "call-script"
+name = "call-script"
 description = "calls a script inside the scripts directory and passes env variables"
-type = "shell"
 cmd = "$SCRIPTS/example-script.sh"
 os = ["macos", "linux"]

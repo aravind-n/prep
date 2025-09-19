@@ -11,28 +11,19 @@ use tracing::error;
 
 /// A step in a recipe.
 ///
-/// Currently, the only supported step type is [`Shell`], which executes
-/// a command in a POSIX shell.
+/// Runs a shell command
 ///
-/// The enum is `#[serde(tag = "type")]` so that deserialization chooses
-/// the variant based on the `"type"` field in serialized input.
+/// # Fields
+/// - `name`: Identifier for the step, used in logs.
+/// - `cmd`: The shell command to execute.
+/// - `os`: Optional list of supported OS names (`"macos"`, `"linux"`, `"windows"`).
+///   If empty, the step runs on all operating systems.
 #[derive(Debug, Deserialize)]
-#[serde(tag = "type")]
-pub enum Step {
-    /// Run a shell command.
-    ///
-    /// # Fields
-    /// - `id`: Identifier for the step, used in logs.
-    /// - `os`: Optional list of supported OS names (`"macos"`, `"linux"`, `"windows"`).
-    ///   If empty, the step runs on all operating systems.
-    /// - `cmd`: The shell command to execute.
-    #[serde(rename = "shell")]
-    Shell {
-        id: String,
-        #[serde(default)]
-        os: Vec<String>,
-        cmd: String,
-    },
+pub struct Step {
+    pub name: String,
+    pub cmd: String,
+    #[serde(default)]
+    pub os: Vec<String>,
 }
 
 impl Step {
@@ -42,9 +33,7 @@ impl Step {
     /// - The step’s `os` list is empty (meaning "all OSes"), or
     /// - The given `host_os` string matches one of the entries in the list.
     pub fn supports_os(&self, host_os: &str) -> bool {
-        match self {
-            Step::Shell { os, .. } => os.is_empty() || os.iter().any(|o| o == host_os),
-        }
+        self.os.is_empty() || self.os.iter().any(|o| o == host_os)
     }
 
     /// Expands environment variables in the given string,
@@ -86,25 +75,23 @@ impl Step {
     ///
     /// # Errors
     /// Logs errors with [`tracing::error`] and returns a boxed error.
-    pub fn execute_shell_command(
-        id: &str,
-        cmd: &str,
-        env_vars: &BTreeMap<String, String>,
-    ) -> Result<(), Box<dyn Error>> {
+    pub fn run(&self, env_vars: Option<&BTreeMap<String, String>>) -> Result<(), Box<dyn Error>> {
         let mut command = Command::new("/bin/sh");
-        command.arg("-c").arg(cmd);
+        command.arg("-c").arg(&self.cmd);
 
-        for (k, v) in env_vars {
-            let expanded_value = Step::expand_with_cwd(v);
-            command.env(k, expanded_value);
+        if let Some(envs) = env_vars {
+            for (k, v) in envs {
+                let expanded_value = Step::expand_with_cwd(v);
+                command.env(k, expanded_value);
+            }
         }
 
         let status = command.status().inspect_err(|e| {
-            error!(error = %e, step_id = %id, "Error encountered when spawning {cmd}");
+            error!(error = %e, step = %self.name, "Error encountered when spawning {}", self.cmd);
         })?;
 
         if !status.success() {
-            error!(step_id = %id, cmd = %cmd, "Error encountered when running {cmd}");
+            error!(step = %self.name, cmd = %self.cmd, "Error encountered when running {}", self.cmd);
             return Err("Failed to execute cmd".into());
         }
 
@@ -116,15 +103,21 @@ impl Step {
 mod tests {
     use super::*;
 
+    pub fn build_step(name: &str, cmd: &str, os: Vec<&str>) -> Step {
+        Step {
+            name: name.into(),
+            cmd: cmd.into(),
+            os: os.iter().map(|&s| s.into()).collect(),
+        }
+    }
+
+
     // ---------- supports_os ----------
 
     #[test]
     fn supports_os_when_not_restricted() {
-        let s = Step::Shell {
-            id: "any".into(),
-            os: vec![], // empty === all OSes
-            cmd: "echo ok".into(),
-        };
+        let s = build_step("any", "echo ok", vec![]);
+
         assert!(s.supports_os("linux"));
         assert!(s.supports_os("macos"));
         assert!(s.supports_os("windows"));
@@ -132,11 +125,7 @@ mod tests {
 
     #[test]
     fn supports_os_only_matches_listed_values() {
-        let s = Step::Shell {
-            id: "nix-only".into(),
-            os: vec!["linux".into(), "macos".into()],
-            cmd: "echo ok".into(),
-        };
+        let s = build_step("nix-only", "echo ok", vec!["linux", "macos"]);
         assert!(s.supports_os("linux"));
         assert!(s.supports_os("macos"));
         assert!(!s.supports_os("windows"));
@@ -147,20 +136,16 @@ mod tests {
     #[test]
     fn deserialize_shell_step_from_toml() {
         let toml_src = r#"
-            type = "shell"
-            id = "build"
+            name = "build"
             cmd = "echo building"
             os = ["linux","macos"]
         "#;
 
         let step: Step = toml::from_str(toml_src).expect("valid shell step toml");
-        match step {
-            Step::Shell { id, cmd, os } => {
-                assert_eq!(id, "build");
-                assert_eq!(cmd, "echo building");
-                assert_eq!(os, vec!["linux".to_string(), "macos".to_string()]);
-            }
-        }
+
+        assert_eq!(step.name, "build");
+        assert_eq!(step.cmd, "echo building");
+        assert_eq!(step.os, vec!["linux".to_string(), "macos".to_string()]);
     }
 
     #[cfg(unix)]
@@ -177,16 +162,15 @@ mod tests {
         }
 
         #[test]
-        fn execute_shell_success_returns_ok() {
-            let envs = BTreeMap::new();
-            Step::execute_shell_command("ok", "true", &envs).expect("should succeed");
+        fn run_success_returns_ok() {
+            let s = build_step("always-succeeds", "true", Vec::new());
+            s.run(None).expect("should succeed");
         }
 
         #[test]
-        fn execute_shell_failure_propagates_error() {
-            let envs = BTreeMap::new();
-            let err = Step::execute_shell_command("fail", "exit 7", &envs)
-                .expect_err("should error for non-zero status");
+        fn run_failure_propagates_error() {
+            let s = build_step("fail_step", "exit 7", Vec::new());
+            let err = s.run(None).expect_err("should error for non-zero status");
             assert!(!format!("{err}").is_empty());
         }
 
@@ -207,9 +191,9 @@ mod tests {
             // The command succeeds only if MYVAR equals the expected string.
             // Using `test` so success/failure is purely via exit code.
             let cmd = format!(r#"test "$MYVAR" = "{}""#, expected_escaped);
+            let s = build_step("pwd-env", &cmd, Vec::new());
 
-            Step::execute_shell_command("pwd-env", &cmd, &envs)
-                .expect("value should match expected");
+            s.run(Some(&envs)).expect("value should match expected");
         }
 
         #[test]
@@ -221,9 +205,9 @@ mod tests {
 
             // Succeeds only if EMPTYVAR is empty (unset or "")
             let cmd = r#"[ -z "${EMPTYVAR:-}" ]"#;
+            let s = build_step("empty-env", cmd, Vec::new());
 
-            Step::execute_shell_command("empty-env", cmd, &envs)
-                .expect("should be empty after expand");
+            s.run(Some(&envs)).expect("should be empty after expand");
         }
     }
 }

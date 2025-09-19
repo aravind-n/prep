@@ -291,10 +291,9 @@ description = "test cookbook"
             toml_src.push_str(
                 r#"
 [[steps]]
-type = "shell"
 "#,
             );
-            toml_src.push_str(&format!(r#"id = "step-{file_stem}""#));
+            toml_src.push_str(&format!(r#"name = "step-{file_stem}""#));
             toml_src.push('\n');
 
             // 🔧 Escape the command for TOML basic string
