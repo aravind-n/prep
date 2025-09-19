@@ -3,9 +3,10 @@ version = "0.1.0"
 description = "Description of what this cookbook does"
 author = "Your Name"
 license = "MIT"
+exclude = []                                           # Any recipes you want to exclude from execution
 
-[env]
 # Add global environment variables here
+[env]
 SCRIPTS = "$PWD/scripts"
 TEMPLATES = "$PWD/templates"
 ASSETS = "$PWD/assets"

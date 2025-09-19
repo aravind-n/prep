@@ -71,7 +71,7 @@ pub fn init_tracing() {
 /// - Creates and writes files/directories on the local filesystem.
 /// - Executes the `git` command if available on `PATH`.
 /// - On Unix platforms, sets executable permission (`0o755`) on `scripts/example-script.sh`.
-pub fn create_new_cookbook(path: &Path) -> Result<(), Box<dyn Error>> {
+pub fn scaffold_cookbook_project(path: &Path) -> Result<(), Box<dyn Error>> {
     if path.exists() {
         error!("Directory {} already exists", path.display());
         return Err("Directory already exists".into());

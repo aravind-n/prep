@@ -25,6 +25,7 @@ pub(crate) enum Command {
     /// Without arguments, runs all recipes in the current directory’s cookbook.
     Run {
         /// Path to a cookbook directory (defaults to current directory).
+        #[arg(default_value = "./")]
         cookbook_path: Option<PathBuf>,
 
         /// Path to a single recipe file to run.

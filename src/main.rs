@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         cli::Command::Init { path } => {
-            utils::create_new_cookbook(&path)?;
+            utils::scaffold_cookbook_project(&path)?;
         }
         cli::Command::Plan { cookbook_path } => {
             let cookbook = Cookbook::new(cookbook_path)?;

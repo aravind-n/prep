@@ -7,7 +7,7 @@
 //! using a directed acyclic graph (DAG) and topological sorting.
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     error::Error,
     path::{Path, PathBuf},
 };
@@ -27,6 +27,8 @@ struct CookbookConfig {
     version: String,
     description: Option<String>,
     #[serde(default)]
+    exclude: HashSet<String>,
+    #[serde(default)]
     env: BTreeMap<String, String>,
 }
 
@@ -41,6 +43,7 @@ pub struct Cookbook {
     pub name: String,
     pub version: String,
     pub description: Option<String>,
+    pub exclude: HashSet<String>,
     pub env: BTreeMap<String, String>,
     pub recipes: BTreeMap<String, Recipe>,
     recipe_to_id: HashMap<String, u32>,
@@ -74,6 +77,7 @@ impl Cookbook {
             name: config.name,
             version: config.version,
             description: config.description,
+            exclude: config.exclude,
             env: config.env,
             recipes,
             recipe_to_id,
@@ -128,19 +132,43 @@ impl Cookbook {
     fn build_graph(&self) -> Result<DiGraphMap<u32, ()>, Box<dyn Error>> {
         let mut graph = DiGraphMap::new();
 
-        for &id in self.id_to_recipe.keys() {
+        let included_ids: HashSet<u32> = self
+            .id_to_recipe
+            .iter()
+            .filter(|(_, name)| !self.exclude.contains(*name))
+            .map(|(id, _)| *id)
+            .collect();
+
+        for &id in &included_ids {
             graph.add_node(id);
         }
 
         for (recipe_name, recipe) in &self.recipes {
-            if let Some(&recipe_id) = self.recipe_to_id.get(recipe_name) {
-                for dependency in &recipe.depends_on {
-                    if let Some(&dependency_id) = self.recipe_to_id.get(dependency) {
-                        graph.add_edge(dependency_id, recipe_id, ());
-                    } else {
+            if self.exclude.contains(recipe_name) {
+                continue;
+            }
+
+            let &recipe_id = match self.recipe_to_id.get(recipe_name) {
+                Some(id) => id,
+                None => continue,
+            };
+
+            for dependency in &recipe.depends_on {
+                if self.exclude.contains(dependency) {
+                    error!(dependency = %dependency, recipe = %recipe_name, "Dependency is excluded");
+                    return Err("Dependency is excluded".into());
+                }
+
+                let &dependency_id = match self.recipe_to_id.get(dependency) {
+                    Some(id) => id,
+                    None => {
                         error!(dependency = %dependency, recipe = %recipe_name, "Dependency not found");
                         return Err("Missing dependency".into());
                     }
+                };
+
+                if included_ids.contains(&dependency_id) && included_ids.contains(&recipe_id) {
+                    graph.add_edge(dependency_id, recipe_id, ());
                 }
             }
         }

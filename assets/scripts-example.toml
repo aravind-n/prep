@@ -1,7 +1,7 @@
-name = "script-calling-recipe"
+name = "scripts-example"
 description = "Calls a script from the scripts directory"
 author = "mise"
-depends_on = ["example"] # We want to run this after the first greeting
+depends_on = ["example"]                                  # We want to run this after the first greeting
 
 [env]
 RECIPE_MSG = "Invoked inside script"
