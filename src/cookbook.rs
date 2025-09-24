@@ -95,8 +95,10 @@ impl Cookbook {
         info!(cookbook = %cookbook_path.display(), "Attempting to build config");
 
         let config_path = cookbook_path.join("config.toml");
-        let raw_config = std::fs::read_to_string(&config_path)?;
-        Ok(toml::from_str(&raw_config)?)
+        let raw_config = std::fs::read_to_string(&config_path)
+            .with_context(|| format!("while reading config file: {}", config_path.display()))?;
+
+        toml::from_str(&raw_config).with_context(|| "while deserializing config".to_string())
     }
 
     /// Loads all recipe TOML files from the `recipes/` directory.

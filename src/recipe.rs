@@ -36,8 +36,11 @@ impl Recipe {
     pub fn new(recipe_path: PathBuf) -> Result<Self> {
         info!(recipe = %recipe_path.display(), "Attempting to load recipe");
 
-        let raw_recipe = std::fs::read_to_string(&recipe_path)?;
-        let recipe: Recipe = toml::from_str(&raw_recipe)?;
+        let raw_recipe = std::fs::read_to_string(&recipe_path)
+            .with_context(|| format!("while reading recipe file: {}", recipe_path.display()))?;
+
+        let recipe: Recipe =
+            toml::from_str(&raw_recipe).with_context(|| "while deserializing toml".to_string())?;
 
         info!(recipe = %recipe_path.display(), "Successfully loaded recipe");
         Ok(recipe)

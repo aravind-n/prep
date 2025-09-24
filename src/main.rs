@@ -24,7 +24,7 @@ fn main() -> Result<()> {
         no_ansi: cli.no_ansi,
         with_time: !cli.no_time,
         to_stderr: !cli.log_to_stdout,
-    });
+    })?;
 
     let cmd = cli.cmd.unwrap_or(cli::Command::Run {
         cookbook_path: PathBuf::from("./"),
