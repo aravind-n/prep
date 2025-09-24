@@ -4,10 +4,11 @@
 //! a shell command. Each step can be constrained to certain operating systems
 //! and may reference environment variables (including `$PWD`).
 
-use std::{borrow::Cow, collections::BTreeMap, error::Error, process::Command};
+use std::{borrow::Cow, collections::BTreeMap, process::Command};
 
+use anyhow::{Context, Result};
 use serde::Deserialize;
-use tracing::error;
+use tracing::{error, info};
 
 /// A step in a recipe.
 ///
@@ -75,7 +76,9 @@ impl Step {
     ///
     /// # Errors
     /// Logs errors with [`tracing::error`] and returns a boxed error.
-    pub fn run(&self, env_vars: Option<&BTreeMap<String, String>>) -> Result<(), Box<dyn Error>> {
+    pub fn run(&self, env_vars: Option<&BTreeMap<String, String>>) -> Result<()> {
+        info!(step = %self.name, "Attempting to run step");
+
         let mut command = Command::new("/bin/sh");
         command.arg("-c").arg(&self.cmd);
 
@@ -86,15 +89,31 @@ impl Step {
             }
         }
 
-        let status = command.status().inspect_err(|e| {
-            error!(error = %e, step = %self.name, "Error encountered when spawning {}", self.cmd);
-        })?;
+        let status = command
+            .status()
+            .with_context(|| format!("Error encountered when spawning {}", self.cmd))?;
 
         if !status.success() {
-            error!(step = %self.name, cmd = %self.cmd, "Error encountered when running {}", self.cmd);
-            return Err("Failed to execute cmd".into());
+            let code = status.code();
+            error!(
+                step = %self.name,
+                cmd = %self.cmd,
+                exit_code = ?code,
+                "Error encountered while running step"
+            );
+
+            // Return the exit code wrapped with context
+            return Err(anyhow::Error::msg(format!(
+                "command `{}` for step `{}` failed{}",
+                self.cmd,
+                self.name,
+                code.map(|c| format!(" (exit code {c})"))
+                    .unwrap_or_default()
+            ))
+            .context("step execution did not succeed"));
         }
 
+        info!(step = %self.name, "Successfully executed step");
         Ok(())
     }
 }
@@ -110,7 +129,6 @@ mod tests {
             os: os.iter().map(|&s| s.into()).collect(),
         }
     }
-
 
     // ---------- supports_os ----------
 

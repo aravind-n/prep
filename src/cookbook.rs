@@ -8,10 +8,10 @@
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    error::Error,
     path::{Path, PathBuf},
 };
 
+use anyhow::{Context, Result, bail, ensure};
 use petgraph::{algo::toposort, graphmap::DiGraphMap};
 use serde::Deserialize;
 use tracing::{error, info};
@@ -69,11 +69,13 @@ impl Cookbook {
     /// # Errors
     /// Returns an error if configuration or any recipe file cannot
     /// be read or parsed.
-    pub fn new(cookbook_path: PathBuf) -> Result<Self, Box<dyn Error>> {
+    pub fn new(cookbook_path: PathBuf) -> Result<Self> {
+        info!(cookbook = %cookbook_path.display(), "Attempting to load cookbook");
+
         let config = Self::build_config(&cookbook_path)?;
         let (recipes, recipe_to_id, id_to_recipe) = Self::build_recipe_maps(&cookbook_path)?;
 
-        Ok(Self {
+        let result = Self {
             name: config.name,
             version: config.version,
             description: config.description,
@@ -82,11 +84,16 @@ impl Cookbook {
             recipes,
             recipe_to_id,
             id_to_recipe,
-        })
+        };
+
+        info!(cookbook = %cookbook_path.display(), "Successfully loaded cookbook");
+        Ok(result)
     }
 
     /// Reads and parses `config.toml` into a [`CookbookConfig`].
-    fn build_config(cookbook_path: &Path) -> Result<CookbookConfig, Box<dyn Error>> {
+    fn build_config(cookbook_path: &Path) -> Result<CookbookConfig> {
+        info!(cookbook = %cookbook_path.display(), "Attempting to build config");
+
         let config_path = cookbook_path.join("config.toml");
         let raw_config = std::fs::read_to_string(&config_path)?;
         Ok(toml::from_str(&raw_config)?)
@@ -98,7 +105,9 @@ impl Cookbook {
     ///
     /// # Errors
     /// Returns an error if any recipe file cannot be read or parsed.
-    fn build_recipe_maps(cookbook_path: &Path) -> Result<RecipeMaps, Box<dyn Error>> {
+    fn build_recipe_maps(cookbook_path: &Path) -> Result<RecipeMaps> {
+        info!(cookbook = %cookbook_path.display(), "Attempting to build recipe maps");
+
         let recipes_dir = cookbook_path.join("recipes");
         let mut recipes = BTreeMap::new();
         let mut recipe_to_id = HashMap::new();
@@ -129,7 +138,9 @@ impl Cookbook {
     ///
     /// # Errors
     /// Returns an error if a recipe declares a dependency that does not exist.
-    fn build_graph(&self) -> Result<DiGraphMap<u32, ()>, Box<dyn Error>> {
+    fn build_graph(&self) -> Result<DiGraphMap<u32, ()>> {
+        info!(cookbook = %self.name, "Attempting to build execution graph");
+
         let mut graph = DiGraphMap::new();
 
         let included_ids: HashSet<u32> = self
@@ -150,20 +161,38 @@ impl Cookbook {
 
             let &recipe_id = match self.recipe_to_id.get(recipe_name) {
                 Some(id) => id,
-                None => continue,
+                None => bail!("internal error: recipe `{recipe_name}` missing from recipe_to_id"),
             };
 
             for dependency in &recipe.depends_on {
-                if self.exclude.contains(dependency) {
-                    error!(dependency = %dependency, recipe = %recipe_name, "Dependency is excluded");
-                    return Err("Dependency is excluded".into());
-                }
+                ensure!(!self.exclude.contains(dependency), {
+                    error!(
+                        cookbook = %self.name,
+                        recipe = %recipe_name,
+                        dependency = %dependency,
+                        "Dependency is excluded"
+                    );
+                    format!(
+                        "recipe `{}` depends on `{}` but that dependency is excluded",
+                        recipe_name, dependency
+                    )
+                });
 
-                let &dependency_id = match self.recipe_to_id.get(dependency) {
-                    Some(id) => id,
+                let dependency_id = match self.recipe_to_id.get(dependency) {
+                    Some(id) => *id,
                     None => {
-                        error!(dependency = %dependency, recipe = %recipe_name, "Dependency not found");
-                        return Err("Missing dependency".into());
+                        error!(
+                            cookbook = %self.name,
+                            recipe = %recipe_name,
+                            dependency = %dependency,
+                            "Dependency not found"
+                        );
+
+                        bail!(
+                            "recipe `{}` declares unknown dependency `{}`",
+                            recipe_name,
+                            dependency
+                        );
                     }
                 };
 
@@ -173,6 +202,7 @@ impl Cookbook {
             }
         }
 
+        info!(cookbook = %self.name, "Successfully built execution graph");
         Ok(graph)
     }
 
@@ -183,19 +213,37 @@ impl Cookbook {
     ///
     /// # Errors
     /// Returns an error if a circular dependency is detected.
-    pub fn get_sorted_recipe_ids(&self) -> Result<Vec<u32>, Box<dyn Error>> {
-        let graph = self.build_graph()?;
+    pub fn get_sorted_recipe_ids(&self) -> Result<Vec<u32>> {
+        info!(cookbook = %self.name, "Attempting to sort recipe ids");
 
-        Ok(toposort(&graph, None).map_err(|e| {
-            let node_name = self
-                .id_to_recipe
-                .get(&e.node_id())
-                .unwrap_or(&"Unknown".to_string())
-                .clone();
+        let graph = self
+            .build_graph()
+            .context("while building execution graph for topological sort")?;
 
-            error!(node = %node_name, "Circular dependency detected");
-            "Circular dependency detected"
-        })?)
+        match toposort(&graph, None) {
+            Ok(order) => Ok(order),
+            Err(cycle) => {
+                let node_id = cycle.node_id();
+                let node_name = self
+                    .id_to_recipe
+                    .get(&node_id)
+                    .map(|s| s.as_str())
+                    .unwrap_or("unknown");
+
+                error!(
+                    cookbook = %self.name,
+                    node_id = %node_id,
+                    node = %node_name,
+                    "Circular dependency detected"
+                );
+
+                bail!(
+                    "circular dependency detected involving recipe `{}` (id {})",
+                    node_name,
+                    node_id
+                );
+            }
+        }
     }
 
     /// Prints a plan of the cookbook to stdout.
@@ -204,7 +252,9 @@ impl Cookbook {
     /// - Cookbook name and version
     /// - Optional description
     /// - Each recipe in dependency order, with its own plan output
-    pub fn plan(&self) -> Result<(), Box<dyn Error>> {
+    pub fn plan(&self) -> Result<()> {
+        info!(cookbook = %self.name, "Attempting to create cookbook execution plan");
+
         let sorted_recipe_ids = self.get_sorted_recipe_ids()?;
 
         println!("{} v{} execution plan:", self.name, self.version);
@@ -234,7 +284,9 @@ impl Cookbook {
     /// # Errors
     /// Returns an error if a recipe fails and `continue_on_error` is `false`,
     /// or if any underlying recipe execution errors occur.
-    pub fn run(&self, continue_on_error: bool) -> Result<(), Box<dyn Error>> {
+    pub fn run(&self, continue_on_error: bool) -> Result<()> {
+        info!(cookbook = %self.name, "Attempting to run cookbook");
+
         let sorted_recipe_ids = self.get_sorted_recipe_ids()?;
 
         println!("Building cookbook {} v{}", self.name, self.version);

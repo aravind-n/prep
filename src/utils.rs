@@ -1,14 +1,13 @@
 //! Utilities used throughout the application.
 
 use std::{
-    error::Error,
-    fs,
-    path::Path,
+    fs::{self},
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
+use anyhow::{Context, Result, bail};
 use tracing::{error, info};
-use tracing_subscriber::EnvFilter;
 
 /// Returns the name of the host operating system.
 ///
@@ -28,35 +27,6 @@ pub(crate) fn host_os() -> &'static str {
     }
 }
 
-/// Initializes global tracing configuration.
-///
-/// This sets up a [`tracing_subscriber`] that:
-/// - Formats logs as **structured JSON**
-/// - Applies an [`EnvFilter`] from the `RUST_LOG` environment variable
-/// - Attaches information about:
-///   - The current span
-///   - Span hierarchy
-///   - Thread IDs
-///   - Thread names
-///
-/// Call this function once at the start of your program before
-/// emitting any tracing events.
-///
-/// # Panics
-///
-/// This function will panic if a global default subscriber
-/// has already been set.
-pub fn init_tracing() {
-    tracing_subscriber::fmt()
-        .json()
-        .with_env_filter(EnvFilter::from_default_env())
-        .with_current_span(true)
-        .with_span_list(true)
-        .with_thread_ids(true)
-        .with_thread_names(true)
-        .init();
-}
-
 /// Creates a new cookbook directory structure at the given `path`.
 ///
 /// # Errors
@@ -71,17 +41,27 @@ pub fn init_tracing() {
 /// - Creates and writes files/directories on the local filesystem.
 /// - Executes the `git` command if available on `PATH`.
 /// - On Unix platforms, sets executable permission (`0o755`) on `scripts/example-script.sh`.
-pub fn scaffold_cookbook_project(path: &Path) -> Result<(), Box<dyn Error>> {
+pub fn scaffold_cookbook_project(path: &Path) -> Result<()> {
+    info!(path = %path.display(), "Attempting to initialize new cookbook");
+
     if path.exists() {
-        error!("Directory {} already exists", path.display());
-        return Err("Directory already exists".into());
+        error!(path = %path.display(), "Directory already exists");
+        bail!("Directory {} already exists", path.display());
     }
 
-    let cookbook_name = path.file_name().unwrap().to_str().unwrap().to_string();
-    info!("Initializing new cookbook at '{}'", cookbook_name);
+    let cookbook_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|s| s.to_owned())
+        .context("Cannot infer cookbook from path (invalid or empty last component")?;
+
+    // Helper for directory creation with context
+    let mkdir = |p: &Path| -> Result<()> {
+        fs::create_dir_all(p).with_context(|| format!("Creating directory `{}`", p.display()))
+    };
 
     // Create the main cookbook directory
-    fs::create_dir_all(path)?;
+    mkdir(path)?;
 
     // Create the required subdirectories.
     let recipes_dir = path.join("recipes");
@@ -89,43 +69,57 @@ pub fn scaffold_cookbook_project(path: &Path) -> Result<(), Box<dyn Error>> {
     let templates_dir = path.join("templates");
     let assets_dir = path.join("assets");
 
-    fs::create_dir_all(&recipes_dir)?;
-    fs::create_dir_all(&scripts_dir)?;
-    fs::create_dir_all(&templates_dir)?;
-    fs::create_dir_all(&assets_dir)?;
+    mkdir(&recipes_dir)?;
+    mkdir(&scripts_dir)?;
+    mkdir(&templates_dir)?;
+    mkdir(&assets_dir)?;
+
+    // Write files with clear context
+    let writef = |p: PathBuf, contents: &str| -> Result<()> {
+        fs::write(&p, contents).with_context(|| format!("Writing file `{}`", p.display()))
+    };
 
     // Create the README.md file
-    let readme_contents = build_template(include_str!("../assets/README.tmpl.md"), &cookbook_name);
-    let readme_path = path.join("README.md");
-    fs::write(readme_path, readme_contents)?;
+    let readme = build_template(include_str!("../assets/README.tmpl.md"), &cookbook_name);
+    writef(path.join("README.md"), &readme)?;
 
     // Create config.toml
-    let config_contents =
-        build_template(include_str!("../assets/config.tmpl.toml"), &cookbook_name);
-    let config_path = path.join("config.toml");
-    fs::write(config_path, config_contents)?;
+    let config_toml = build_template(include_str!("../assets/config.tmpl.toml"), &cookbook_name);
+    writef(path.join("config.toml"), &config_toml)?;
 
-    // Create recipe.toml
-    let recipe_contents = include_str!("../assets/example.toml");
-    let recipe_path = recipes_dir.join("example.toml");
-    fs::write(recipe_path, recipe_contents)?;
+    // Create example.toml
+    writef(
+        recipes_dir.join("example.toml"),
+        include_str!("../assets/example.toml"),
+    )?;
 
     // Create scripts/example-script.sh
-    let script_contents = include_str!("../assets/recipe-script.sh");
     let script_path = scripts_dir.join("example-script.sh");
-    fs::write(&script_path, script_contents)?;
+    writef(
+        script_path.clone(),
+        include_str!("../assets/recipe-script.sh"),
+    )?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&script_path)?.permissions();
+        let mut perms = fs::metadata(&script_path)
+            .with_context(|| format!("reading metadata for `{}`", script_path.display()))?
+            .permissions();
+
         perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms)?;
+        fs::set_permissions(&script_path, perms).with_context(|| {
+            format!(
+                "setting executable permissions on `{}`",
+                script_path.display()
+            )
+        })?;
     }
 
-    // Create script_recipe.toml
-    let recipe_contents = include_str!("../assets/scripts-example.toml");
-    let recipe_path = recipes_dir.join("scripts-example.toml");
-    fs::write(recipe_path, recipe_contents)?;
+    // Create script_example.toml
+    writef(
+        recipes_dir.join("scripts-example.toml"),
+        include_str!("../assets/scripts-example.toml"),
+    )?;
 
     // Run `git init` in the new directory
     info!("Running `git init`...");
@@ -134,15 +128,24 @@ pub fn scaffold_cookbook_project(path: &Path) -> Result<(), Box<dyn Error>> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .current_dir(path)
-        .status()?;
+        .status()
+        .with_context(|| format!("failed to spawn `git init` in `{}`", path.display()))?;
 
     if !status.success() {
-        error!("Failed to run `git init`");
-        return Err("Failed to initialize git repository".into());
+        error!(path = %path.display(), code = ?status.code(), "Failed to run `git init`");
+
+        bail!(
+            "`git init` failed in `{}`{}",
+            path.display(),
+            status
+                .code()
+                .map(|c| format!(" (exit code {c})"))
+                .unwrap_or_default()
+        );
     }
 
-    info!("Initialized Cookbook");
     println!("Initialized Cookbook");
+    info!(path = %path.display(), "Successfuly initialized cookbook");
 
     Ok(())
 }

@@ -4,10 +4,11 @@
 //!
 //! Recipes are typically loaded from TOML files and executed in order.
 
-use std::{collections::BTreeMap, error::Error, path::PathBuf};
+use std::{collections::BTreeMap, path::PathBuf};
 
+use anyhow::{Context, Result};
 use serde::Deserialize;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::{step::Step, utils};
 
@@ -32,15 +33,20 @@ impl Recipe {
     /// # Errors
     /// Returns an error if the file cannot be read or the TOML cannot
     /// be deserialized into a [`Recipe`].
-    pub fn new(recipe_path: PathBuf) -> Result<Self, Box<dyn Error>> {
+    pub fn new(recipe_path: PathBuf) -> Result<Self> {
+        info!(recipe = %recipe_path.display(), "Attempting to load recipe");
+
         let raw_recipe = std::fs::read_to_string(&recipe_path)?;
         let recipe: Recipe = toml::from_str(&raw_recipe)?;
 
+        info!(recipe = %recipe_path.display(), "Successfully loaded recipe");
         Ok(recipe)
     }
 
     /// Prints a plan of the recipe to stdout, without executing any steps.
     pub fn plan(&self) {
+        info!(recipe = %self.name, "Attempting to create plan for recipe");
+
         let host_os = utils::host_os();
         let mut dependencies_str = self.depends_on.join(", ");
         if !dependencies_str.is_empty() {
@@ -65,6 +71,8 @@ impl Recipe {
 
             println!("    - Step: {}", step.name);
         }
+
+        info!(recipe = %self.name, "Successfully planned recipe");
     }
 
     /// Runs the recipe, executing its steps sequentially.
@@ -90,9 +98,10 @@ impl Recipe {
         &self,
         continue_on_error: bool,
         cookbook_env_vars: Option<BTreeMap<String, String>>,
-    ) -> Result<(), Box<dyn Error>> {
-        let host_os = utils::host_os();
+    ) -> Result<()> {
+        info!(recipe = %self.name, "Attempting to run recipe");
 
+        let host_os = utils::host_os();
         let mut env_vars;
 
         if let Some(cookbook_envs) = cookbook_env_vars {
@@ -102,31 +111,39 @@ impl Recipe {
             env_vars = self.env.clone();
         }
 
-        info!(recipe = %self.name, "Starting recipe");
+        let mut had_error = false;
         println!("\n=> Running recipe {}", self.name);
 
         for step in &self.steps {
             if !step.supports_os(host_os) {
-                warn!(step = %step.name, "step skipped (mismatched os)");
+                warn!(step = %step.name, "Step skipped (mismatched os)");
                 continue;
             }
 
             println!("\n==> step {}", step.name);
 
-            match step.run(Some(&env_vars)) {
-                Ok(_) => (),
-                Err(e) => {
-                    eprintln!("==> step {} failed\n", step.name);
-                    if !continue_on_error {
-                        return Err(e);
-                    }
+            if let Err(e) = step
+                .run(Some(&env_vars))
+                .with_context(|| format!("while running step: {}", step.name))
+            {
+                had_error = true;
+                error!(recipe = %self.name, step = %step.name, "Step failed");
+
+                if !continue_on_error {
+                    return Err(
+                        e.context(format!("Error occurred, stopping recipe: {}", self.name))
+                    );
                 }
             }
         }
 
-        println!("\n=> Recipe completed");
-        info!(recipe = %self.name, "Finished recipe");
+        if had_error && continue_on_error {
+            println!("\n=> Recipe completed with errors");
+        } else {
+            println!("\n=> Recipe completed");
+        }
 
+        info!(recipe = %self.name, "Successfully ran recipe");
         Ok(())
     }
 }

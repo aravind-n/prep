@@ -1,28 +1,31 @@
-Mise
-===
+# Mise
+
 Mise-en-place for your computer
   
-
 **mise** is a fast, minimal tool for bootstrapping developer machines with
 reproducible, version-controlled recipes.
 
 ## What can I use it for?
+
 Setting up dev machines is slow and inconsistent. Teams want a dead-simple,
 reproducible way to execute a **set of commands** that may have **dependencies**
 
-## Features (v0.2.0)
-- Runs a cookbook that you manage
-- Cookbooks are a git repo that you manage
-- Performs dependency resolution for all your recipes
+## Features (v0.2.7)
+
+- Scaffolds a new cookbook with
+- Runs an individual recipe
+- Runs a cookbook
+  - Performs dependency resolution for all your recipes
 - Works on macOS and Linux
-- Stops on first error by default
 - Streams stdout/stderr live to your console
+- Rich logging support
 
 ## Installation
+
 Build from source (requires Rust):
 
 ```bash
-git clone https://github.com/yourname/mise.git
+git clone https://gitlab.com/aravind/mise.git
 cd mise
 cargo install --path .
 ```
@@ -31,31 +34,39 @@ This installs the mise binary into your Cargo bin path.
 
 ## Usage
 
-Run a cookbook (inside cookbook):
-```sh
-$ mise run
+Initialize a cookbook:
+
+```bash
+mise init ./path/to/cookbook    # Defaults to ./
 ```
 
-Explicitly run a cookbook:
-```sh
-$ mise run ./cookbook
+Run a cookbook:
+
+```bash
+mise run ./cookbook     # Defaults to ./
 ```
 
 Run a single recipe:
-```sh
-$ mise run --recipe java_setup.toml
+
+```bash
+mise run --recipe java_setup.toml
 ```
 
 Options:
+
 - ``--continue-on-error``: keep going even if a step fails
 
 ## Cookbook structure
+
 See the example cookbook
 
 ## Recipe Format
+
 A recipe is a TOML file describing environment variables and steps. An example can be found in ``example.toml``
 
 ## Future Work
-- More step types (pkg, etc)
-- arrays for cmd in recipe.toml (maybe)
+
+- Arrays for cmd in recipe.toml (maybe)
 - Windows support
+- Early exit in recipe
+- New name (because conflict. I like this name)
