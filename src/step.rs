@@ -25,6 +25,8 @@ pub struct Step {
     pub cmd: String,
     #[serde(default)]
     pub os: Vec<String>,
+    #[serde(default)]
+    pub exit_on_success: bool,
 }
 
 impl Step {
@@ -127,6 +129,7 @@ mod tests {
             name: name.into(),
             cmd: cmd.into(),
             os: os.iter().map(|&s| s.into()).collect(),
+            exit_on_success: false,
         }
     }
 

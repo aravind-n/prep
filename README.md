@@ -10,7 +10,7 @@ reproducible, version-controlled recipes.
 Setting up dev machines is slow and inconsistent. Teams want a dead-simple,
 reproducible way to execute a **set of commands** that may have **dependencies**
 
-## Features (v0.2.7)
+## Features (v0.2.8)
 
 - Scaffolds a new cookbook with
 - Runs an individual recipe
@@ -19,6 +19,7 @@ reproducible way to execute a **set of commands** that may have **dependencies**
 - Works on macOS and Linux
 - Streams stdout/stderr live to your console
 - Rich logging support
+- Early exit logic in steps with `exit_on_success`
 
 ## Installation
 

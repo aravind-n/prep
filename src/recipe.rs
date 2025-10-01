@@ -137,6 +137,10 @@ impl Recipe {
                         e.context(format!("Error occurred, stopping recipe: {}", self.name))
                     );
                 }
+            } else if step.exit_on_success {
+                // Short circuit recipe if step had a exit_on_success flag
+                info!(step = %step.name, "Stopping recipe early due to exit on success clause");
+                break;
             }
         }
 
@@ -199,6 +203,7 @@ mod tests {
                 name: "s1".into(),
                 cmd: "true".into(),
                 os: vec![utils::host_os().into()],
+                exit_on_success: false,
             }],
         };
         r.plan(); // ensure no panic
@@ -221,11 +226,13 @@ mod tests {
                         name: "s1".into(),
                         cmd: "true".into(),
                         os: vec![utils::host_os().into()],
+                        exit_on_success: false,
                     },
                     Step {
                         name: "s2".into(),
                         cmd: "true".into(),
                         os: vec![utils::host_os().into()],
+                        exit_on_success: false,
                     },
                 ],
             };
@@ -256,6 +263,7 @@ mod tests {
                     name: "check".into(),
                     cmd: cmd.into(),
                     os: vec![utils::host_os().into()],
+                    exit_on_success: false,
                 }],
             };
 
@@ -283,6 +291,7 @@ mod tests {
                     name: "s1".into(),
                     os: vec![other],
                     cmd: "exit 42".into(),
+                    exit_on_success: false,
                 }],
             };
 
@@ -302,11 +311,13 @@ mod tests {
                         name: "fail".into(),
                         os: vec![utils::host_os().into()],
                         cmd: "exit 2".into(),
+                        exit_on_success: false,
                     },
                     Step {
                         name: "ok".into(),
                         os: vec![utils::host_os().into()],
                         cmd: "true".into(),
+                        exit_on_success: false,
                     },
                 ],
             };
@@ -327,17 +338,45 @@ mod tests {
                         name: "fail".into(),
                         os: vec![utils::host_os().into()],
                         cmd: "exit 3".into(),
+                        exit_on_success: false,
                     },
                     Step {
                         name: "should_not_run".into(),
                         os: vec![utils::host_os().into()],
                         cmd: "true".into(),
+                        exit_on_success: false,
                     },
                 ],
             };
 
             let err = r.run(false, None).expect_err("should stop on first error");
             assert!(!format!("{err}").is_empty());
+        }
+
+        #[test]
+        fn exit_on_success_triggers_short_circuit() {
+            let r = Recipe {
+                name: "early_exit".into(),
+                description: None,
+                depends_on: vec![],
+                env: BTreeMap::new(),
+                steps: vec![
+                    Step {
+                        name: "will_pass".into(),
+                        os: vec![utils::host_os().into()],
+                        cmd: "true".into(),
+                        exit_on_success: true,
+                    },
+                    Step {
+                        name: "should_not_run".into(),
+                        os: vec![utils::host_os().into()],
+                        cmd: "exit 3".into(),
+                        exit_on_success: false,
+                    },
+                ],
+            };
+
+            r.run(false, None).expect("should not trigger an error");
         }
     }
 }
