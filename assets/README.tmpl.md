@@ -1,26 +1,26 @@
 # {}
 
-This is a new cookbook scaffolded by `mise`.
+This is a new cookbook scaffolded by `prep`.
 
 ## Getting Started
 
 ### Prerequisites
 
 - git
-- mise
+- prep
 
 ### Running the cookbook
 
 From outside the cookbook directory
 
 ```sh
-mise run path/to/{}
+prep run path/to/{}
 ```
 
 Alternatively from inside the cookbook directory
 
 ```sh
-mise run .
+prep run .
 ```
 
 ### Editing the cookbook

@@ -1,6 +1,6 @@
 name = "scripts-example"
 description = "Calls a script from the scripts directory"
-author = "mise"
+author = "prep"
 depends_on = ["example"]                                  # We want to run this after the first greeting
 
 [env]

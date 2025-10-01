@@ -1,8 +1,8 @@
-# Mise
+# Prep
 
-Mise-en-place for your computer
+A prep kitchen for your computer
   
-**mise** is a fast, minimal tool for bootstrapping developer machines with
+**prep** is a fast, minimal tool for bootstrapping developer machines with
 reproducible, version-controlled recipes.
 
 ## What can I use it for?
@@ -26,31 +26,31 @@ reproducible way to execute a **set of commands** that may have **dependencies**
 Build from source (requires Rust):
 
 ```bash
-git clone https://gitlab.com/aravind/mise.git
-cd mise
+git clone https://gitlab.com/aravind/prep.git
+cd prep
 cargo install --path .
 ```
 
-This installs the mise binary into your Cargo bin path.
+This installs the prep binary into your Cargo bin path.
 
 ## Usage
 
 Initialize a cookbook:
 
 ```bash
-mise init ./path/to/cookbook    # Defaults to ./
+prep init ./path/to/cookbook    # Defaults to ./
 ```
 
 Run a cookbook:
 
 ```bash
-mise run ./cookbook     # Defaults to ./
+prep run ./cookbook     # Defaults to ./
 ```
 
 Run a single recipe:
 
 ```bash
-mise run --recipe java_setup.toml
+prep run --recipe java_setup.toml
 ```
 
 Options:

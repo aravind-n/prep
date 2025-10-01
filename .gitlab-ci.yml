@@ -57,7 +57,7 @@ build:
     - cargo build --locked --workspace --release --target $TARGET
   artifacts:
     paths:
-      - target/$TARGET/release/mise
+      - target/$TARGET/release/prep
     expire_in: 1 week
 
 # -------------------- TEST --------------------
@@ -84,7 +84,7 @@ test:
 # We’ll upload to the Generic Package Registry with CI_JOB_TOKEN.
 # Docs: https://docs.gitlab.com/user/packages/generic_packages/
 .package_vars: &package_vars
-  PACKAGE_NAME: "mise"
+  PACKAGE_NAME: "prep"
   PACKAGE_VERSION: "$CI_COMMIT_TAG"
   PACKAGE_BASE_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${PACKAGE_VERSION}"
 
@@ -101,15 +101,15 @@ package-linux:
   script:
     - *release_guard
     - mkdir -p dist
-    - tar -C target/x86_64-unknown-linux-gnu/release -czvf "dist/mise-${CI_COMMIT_TAG}-linux-x64.tar.gz" mise
+    - tar -C target/x86_64-unknown-linux-gnu/release -czvf "dist/prep-${CI_COMMIT_TAG}-linux-x64.tar.gz" prep
     - >
       curl --fail --location
       --header "JOB-TOKEN: ${CI_JOB_TOKEN}"
-      --upload-file "dist/mise-${CI_COMMIT_TAG}-linux-x64.tar.gz"
-      "${PACKAGE_BASE_URL}/mise-${CI_COMMIT_TAG}-linux-x64.tar.gz"
+      --upload-file "dist/prep-${CI_COMMIT_TAG}-linux-x64.tar.gz"
+      "${PACKAGE_BASE_URL}/prep-${CI_COMMIT_TAG}-linux-x64.tar.gz"
   artifacts:
     paths:
-      - dist/mise-${CI_COMMIT_TAG}-linux-x64.tar.gz
+      - dist/prep-${CI_COMMIT_TAG}-linux-x64.tar.gz
     expire_in: 1 week
 
 # -------------------- RELEASE (create GitLab Release with links) --------------------
@@ -134,4 +134,4 @@ release-create:
     assets:
       links:
         - name: "Linux x64"
-          url: "${PACKAGE_BASE_URL}/mise-${CI_COMMIT_TAG}-linux-x64.tar.gz"
+          url: "${PACKAGE_BASE_URL}/prep-${CI_COMMIT_TAG}-linux-x64.tar.gz"

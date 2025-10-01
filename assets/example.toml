@@ -1,6 +1,6 @@
 name = "example"
 description = "An example recipe"
-author = "mise"
+author = "prep"
 depends_on = []                   # names of any upstream dependencies
 
 [env]
