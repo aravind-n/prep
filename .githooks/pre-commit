@@ -1,0 +1,13 @@
+#!/bin/sh
+
+set -e
+
+FILES="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.rs$' || true)"
+
+if [ -n "$FILES" ]; then
+  # Run cargo fmt on just the staged files
+  cargo fmt -- $FILES
+fi
+
+git update-index --again
+cargo clippy --workspace --all-targets --all-features -- -D warnings
