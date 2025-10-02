@@ -61,6 +61,23 @@ impl Step {
         .into_owned()
     }
 
+    /// Safely single-quote a string for sh: ' -> '\'' sequence
+    ///
+    /// Returns the escaped string
+    fn sh_single_quote(s: &str) -> String {
+        let mut out = String::with_capacity(s.len() + 16);
+        out.push('\'');
+        for ch in s.chars() {
+            if ch == '\'' {
+                out.push_str("'\\''");
+            } else {
+                out.push(ch);
+            }
+        }
+        out.push('\'');
+        out
+    }
+
     /// Executes a shell command for a step. Currently only supports unix systems
     ///
     /// The command is executed with `/bin/sh -c <cmd>`, and any additional
@@ -81,8 +98,17 @@ impl Step {
     pub fn run(&self, env_vars: Option<&BTreeMap<String, String>>) -> Result<()> {
         info!(step = %self.name, "Attempting to run step");
 
-        let mut command = Command::new("/bin/sh");
-        command.arg("-c").arg(&self.cmd);
+        let user_shell = match Step::expand_with_cwd("$SHELL") {
+            s if s.is_empty() => "/bin/sh".into(),
+            s => s,
+        };
+
+        let inner = Step::sh_single_quote(&self.cmd);
+        let after_login = format!("exec /bin/sh -c {}", inner);
+
+        let mut command = Command::new(&user_shell);
+
+        command.arg("-l").arg("-c").arg(&after_login);
 
         if let Some(envs) = env_vars {
             for (k, v) in envs {

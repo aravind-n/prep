@@ -138,19 +138,19 @@ impl Recipe {
                     );
                 }
             } else if step.exit_on_success {
-                // Short circuit recipe if step had a exit_on_success flag
                 info!(step = %step.name, "Stopping recipe early due to exit on success clause");
                 break;
             }
         }
 
         if had_error && continue_on_error {
+            warn!(recipe = %self.name, "Recipe completed with errors");
             println!("\n=> Recipe completed with errors");
         } else {
+            info!(recipe = %self.name, "Successfully ran recipe");
             println!("\n=> Recipe completed");
         }
 
-        info!(recipe = %self.name, "Successfully ran recipe");
         Ok(())
     }
 }
