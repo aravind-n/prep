@@ -104,7 +104,7 @@ impl Step {
         };
 
         let inner = Step::sh_single_quote(&self.cmd);
-        let after_login = format!("exec /bin/sh -c {}", inner);
+        let after_login = format!("exec /bin/bash -c {}", inner);
 
         let mut command = Command::new(&user_shell);
 
