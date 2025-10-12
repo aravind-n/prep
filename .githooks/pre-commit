@@ -1,13 +1,20 @@
 #!/bin/sh
 
-set -e
+set -euo pipefail
 
+echo "Running pre-commit hook..."
+
+echo " -> Checking formatting..."
 FILES="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.rs$' || true)"
 
 if [ -n "$FILES" ]; then
-  # Run cargo fmt on just the staged files
-  cargo fmt -- $FILES
+  cargo fmt --check -- $FILES
+else
+  echo " -> No Rust files staged, skipping format check."
 fi
 
-git update-index --again
+# 2. Lint the entire workspace with Clippy
+echo " -> Linting ..."
 cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+echo "Pre-commit checks passed!"

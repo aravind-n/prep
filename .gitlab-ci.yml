@@ -1,137 +1,200 @@
+# Gitlab CI Pipeline configuration
+# Triggers only on merge requests, default branch, and tags
+# Lints, builds, and tests the code on MRs and default branch
+# Creates a release on tags if the tagged commit is the head of default branch
+# Triggers workflows in GitHub Actions to build macOS targets
+
 workflow:
   rules:
-    # Run pipelines for Merge Requests
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    # Run pipelines for the default branch (e.g., master/main)
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    # Run pipelines for tags (needed for releases)
     - if: $CI_COMMIT_TAG
-    # Otherwise, don't create a pipeline
     - when: never
 
 stages:
   - lint
   - build
   - test
-  - package
   - release
 
 variables:
-  RUST_IMAGE: ${RUST_IMAGE:-rust:1.90-slim}
+  RUST_IMAGE: "rust:1.87-slim"
+  CARGO_TERM_COLOR: "always"
+  GIT_STRATEGY: "fetch"
+  GIT_SUBMODULE_STRATEGY: "recursive"
 
-# -------------------- LINT --------------------
-
-format-check:
-  stage: lint
-  image: $RUST_IMAGE
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  script:
-    - rustup component add rustfmt
-    - cargo fmt --all -- --check
-
-clippy-check:
-  stage: lint
-  image: $RUST_IMAGE
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  script:
-    - rustup component add clippy
-    - cargo clippy --locked --all-targets --all-features -- -D warnings
-
-# -------------------- BUILD (matrix) --------------------
-
-build:
-  stage: build
-  image: $RUST_IMAGE
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG
-  variables:
-    TARGET: x86_64-unknown-linux-gnu
-  script:
-    - rustup target add $TARGET
-    - cargo build --locked --workspace --release --target $TARGET
-  artifacts:
+default:
+  image: ${RUST_IMAGE}
+  before_script:
+    - export CARGO_HOME="$CI_PROJECT_DIR/.cargo"
+    - rustc -V && cargo -V
+  cache:
+    key:
+      prefix: "cargo-${CI_PROJECT_ID}"
+      files: [Cargo.lock]
     paths:
-      - target/$TARGET/release/prep
-    expire_in: 1 week
+      - target/
+      - .cargo/registry/
+      - .cargo/git/
+    policy: pull-push
 
-# -------------------- TEST --------------------
+linter:
+  stage: lint
+  cache:
+    key:
+      prefix: "cargo-${CI_PROJECT_ID}"
+      files: [Cargo.lock]
+    paths:
+      - target/
+      - .cargo/registry/
+      - .cargo/git/
+    policy: pull
+  script:
+    - rustup component add rustfmt clippy || true
+    - cargo fmt --all -- --check
+    - cargo clippy --workspace --all-targets --all-features -- -D warnings
+  artifacts:
+    when: on_failure
+    expire_in: 1 day
+    paths:
+      - target/.rustc_info.json
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
+
+build-linux:
+  stage: build
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
+  script:
+    - cargo build --workspace --release
+    - mkdir -p out/linux
+    - cp "target/release/${CI_PROJECT_NAME}" "out/linux/${CI_PROJECT_NAME}-linux-x86-64"
+    - echo "LINUX_JOB_ID=$CI_JOB_ID" > ids.env
+  artifacts:
+    expire_in: never
+    paths: [out/linux/]
+    reports:
+      dotenv: ids.env
+
+# macOS via GitHub — Intel x86_64
+build-macos-x86:
+  stage: build
+  image: alpine:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
+  before_script:
+    - export GL_REPO_URL="${CI_PROJECT_URL}.git"
+    - apk add --no-cache curl jq unzip
+  script:
+    - /bin/sh scripts/ci/github_macos_build.sh x86_64 macos-x86
+    - echo "MAC_X86_JOB_ID=$CI_JOB_ID" > ids.env
+  artifacts:
+    expire_in: never
+    paths: [out/macos-x86/]
+    reports:
+      dotenv: ids.env
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - api_failure
+      - stuck_or_timeout_failure
+
+# macOS via GitHub — Apple Silicon
+build-macos-aarch64:
+  stage: build
+  image: alpine:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
+  before_script:
+    - export GL_REPO_URL="${CI_PROJECT_URL}.git"
+    - apk add --no-cache curl jq unzip
+  script:
+    - /bin/sh scripts/ci/github_macos_build.sh aarch64 macos-aarch64
+    - echo "MAC_AARCH64_JOB_ID=$CI_JOB_ID" > ids.env
+  artifacts:
+    expire_in: never
+    paths: [out/macos-aarch64/]
+    reports:
+      dotenv: ids.env
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - api_failure
+      - stuck_or_timeout_failure
+
 
 test:
   stage: test
-  image: $RUST_IMAGE
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  script:
-    - cargo test --locked --workspace
-
-# -------------------- PACKAGE (tar + upload to Package Registry) --------------------
-
-# Guard script to ensure the tag commit is on the default branch.
-.release_guard: &release_guard |
-  git fetch --depth=200 origin "$CI_DEFAULT_BRANCH"
-  if ! git merge-base --is-ancestor "$CI_COMMIT_SHA" "origin/$CI_DEFAULT_BRANCH"; then
-    echo "Tag $CI_COMMIT_TAG is not on $CI_DEFAULT_BRANCH; skipping release."
-    exit 1
-  fi
-
-# We’ll upload to the Generic Package Registry with CI_JOB_TOKEN.
-# Docs: https://docs.gitlab.com/user/packages/generic_packages/
-.package_vars: &package_vars
-  PACKAGE_NAME: "prep"
-  PACKAGE_VERSION: "$CI_COMMIT_TAG"
-  PACKAGE_BASE_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PACKAGE_NAME}/${PACKAGE_VERSION}"
-
-package-linux:
-  stage: package
-  image: $RUST_IMAGE
-  needs:
-    - job: build
-      artifacts: true
+  needs: ["build-linux"]
   rules:
     - if: $CI_COMMIT_TAG
-  variables:
-    <<: *package_vars
+      when: never
+    - when: on_success
   script:
-    - *release_guard
-    - mkdir -p dist
-    - tar -C target/x86_64-unknown-linux-gnu/release -czvf "dist/prep-${CI_COMMIT_TAG}-linux-x64.tar.gz" prep
-    - >
-      curl --fail --location
-      --header "JOB-TOKEN: ${CI_JOB_TOKEN}"
-      --upload-file "dist/prep-${CI_COMMIT_TAG}-linux-x64.tar.gz"
-      "${PACKAGE_BASE_URL}/prep-${CI_COMMIT_TAG}-linux-x64.tar.gz"
-  artifacts:
-    paths:
-      - dist/prep-${CI_COMMIT_TAG}-linux-x64.tar.gz
-    expire_in: 1 week
+    - cargo test --workspace --all-targets --release -- --nocapture
 
-# -------------------- RELEASE (create GitLab Release with links) --------------------
-
-release-create:
+guard_release:
   stage: release
-  image: $RUST_IMAGE
-  needs:
-    - job: package-linux
-      artifacts: true
   rules:
-    - if: $CI_COMMIT_TAG
-  variables:
-    <<: *package_vars
+    - if: '$CI_COMMIT_TAG =~ /^v(\d+)\.(\d+)\.(\d+)$/'
+      when: always
+    - when: never
+  script: # Check if tagged commit is the HEAD of default branch
+    - git fetch --no-tags --depth=1 origin "$CI_DEFAULT_BRANCH"
+    - |
+      HEAD_SHA=$(git rev-parse "origin/$CI_DEFAULT_BRANCH")
+      if [ "$HEAD_SHA" = "$CI_COMMIT_SHA" ]; then
+        echo "Guard OK — ${CI_COMMIT_TAG} is HEAD of ${CI_DEFAULT_BRANCH}"
+      else
+        echo "Guard FAILED — tag not at HEAD"; exit 1
+      fi
+
+create-release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  needs:
+    - job: build-linux
+      artifacts: true
+    - job: build-macos-x86
+      artifacts: true
+    - job: build-macos-aarch64
+      artifacts: true
+    - job: guard_release
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v(\d+)\.(\d+)\.(\d+)$/'
+      when: always
+    - when: never
   script:
-    - *release_guard
-    - echo "Creating GitLab Release for ${CI_COMMIT_TAG}"
+    - echo "Running release job for $CI_COMMIT_TAG"
   release:
-    name: "Release $CI_COMMIT_TAG"
-    tag_name: "$CI_COMMIT_TAG"
-    description: "Release for version $CI_COMMIT_TAG"
+    name: '${CI_PROJECT_NAME} ${CI_COMMIT_TAG}'
+    tag_name: '$CI_COMMIT_TAG'
+    ref: '$CI_COMMIT_SHA'
+    description: 'Automated release for $CI_COMMIT_TAG'
     assets:
       links:
-        - name: "Linux x64"
-          url: "${PACKAGE_BASE_URL}/prep-${CI_COMMIT_TAG}-linux-x64.tar.gz"
+        # Linux artifact from build-linux
+        - name: '${CI_PROJECT_NAME}-linux-x86-64'
+          url:  '${CI_PROJECT_URL}/-/jobs/${LINUX_JOB_ID}/artifacts/raw/out/linux/${CI_PROJECT_NAME}-linux-x86-64'
+          filepath: '/binaries/$CI_COMMIT_TAG/${CI_PROJECT_NAME}-linux-x86-64'
+          link_type: 'package'
+        # macOS x86 artifact from build-macos-x86
+        - name: '${CI_PROJECT_NAME}-macos-x86'
+          url:  '${CI_PROJECT_URL}/-/jobs/${MAC_X86_JOB_ID}/artifacts/raw/out/macos-x86/${CI_PROJECT_NAME}-macos-x86'
+          filepath: '/binaries/$CI_COMMIT_TAG/${CI_PROJECT_NAME}-macos-x86'
+          link_type: 'package'
+        # macOS Apple Silicon artifact from build-macos-aarch64
+        - name: '${CI_PROJECT_NAME}-macos-aarch64'
+          url:  '${CI_PROJECT_URL}/-/jobs/${MAC_AARCH64_JOB_ID}/artifacts/raw/out/macos-aarch64/${CI_PROJECT_NAME}-macos-aarch64'
+          filepath: '/binaries/$CI_COMMIT_TAG/${CI_PROJECT_NAME}-macos-aarch64'
+          link_type: 'package'
