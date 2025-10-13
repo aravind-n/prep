@@ -3,10 +3,10 @@ set -euo pipefail
 
 # Usage: sh scripts/ci/github_macos_build.sh <arch> <artifact_dir>
 #   arch: x86_64 | aarch64
-#   artifact_dir: macos-x86 | macos-aarch64
+#   artifact_dir: macos-x86 | macos-arm64
 
 ARCH="${1:?arch required (x86_64|aarch64)}"
-OUT_DIR="${2:?artifact dir required (macos-x86|macos-aarch64)}"
+OUT_DIR="${2:?artifact dir required (macos-x86|macos-arm64)}"
 
 : "${GH_TOKEN:?set GH_TOKEN}"         # GitHub PAT: Actions read/write, Contents read
 : "${GH_REPO:?set GH_REPO}"

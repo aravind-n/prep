@@ -115,7 +115,7 @@ build-macos-x86:
       - stuck_or_timeout_failure
 
 # macOS via GitHub — Apple Silicon
-build-macos-aarch64:
+build-macos-arm64:
   stage: build
   image: alpine:latest
   rules:
@@ -130,11 +130,11 @@ build-macos-aarch64:
     - export GL_REPO_URL="${CI_PROJECT_URL}.git"
     - apk add --no-cache curl jq unzip
   script:
-    - /bin/sh scripts/ci/github_macos_build.sh aarch64 macos-aarch64
-    - echo "MAC_AARCH64_JOB_ID=$CI_JOB_ID" > ids.env
+    - /bin/sh scripts/ci/github_macos_build.sh aarch64 macos-arm64
+    - echo "MAC_ARM64_JOB_ID=$CI_JOB_ID" > ids.env
   artifacts:
     expire_in: never
-    paths: [out/macos-aarch64/]
+    paths: [out/macos-arm64/]
     reports:
       dotenv: ids.env
   retry:
@@ -186,7 +186,7 @@ create-release:
       artifacts: true
     - job: build-macos-x86
       artifacts: true
-    - job: build-macos-aarch64
+    - job: build-macos-arm64
       artifacts: true
     - job: guard_release
   rules:
@@ -215,8 +215,8 @@ create-release:
           url:  '${CI_PROJECT_URL}/-/jobs/${MAC_X86_JOB_ID}/artifacts/raw/out/macos-x86/${CI_PROJECT_NAME}-macos-x86'
           filepath: '/binaries/$CI_COMMIT_TAG/${CI_PROJECT_NAME}-macos-x86'
           link_type: 'package'
-        # macOS Apple Silicon artifact from build-macos-aarch64
-        - name: '${CI_PROJECT_NAME}-macos-aarch64'
-          url:  '${CI_PROJECT_URL}/-/jobs/${MAC_AARCH64_JOB_ID}/artifacts/raw/out/macos-aarch64/${CI_PROJECT_NAME}-macos-aarch64'
-          filepath: '/binaries/$CI_COMMIT_TAG/${CI_PROJECT_NAME}-macos-aarch64'
+        # macOS Apple Silicon artifact from build-macos-arm64
+        - name: '${CI_PROJECT_NAME}-macos-arm64'
+          url:  '${CI_PROJECT_URL}/-/jobs/${MAC_ARM64_JOB_ID}/artifacts/raw/out/macos-arm64/${CI_PROJECT_NAME}-macos-arm64'
+          filepath: '/binaries/$CI_COMMIT_TAG/${CI_PROJECT_NAME}-macos-arm64'
           link_type: 'package'
