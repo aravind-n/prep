@@ -156,19 +156,27 @@ test:
 
 guard_release:
   stage: release
+  image: alpine:latest
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v(\d+)\.(\d+)\.(\d+)$/'
       when: always
     - when: never
+  before_script:
+    - apk add --no-cache git
   script: # Check if tagged commit is the HEAD of default branch
     - git fetch --no-tags --depth=1 origin "$CI_DEFAULT_BRANCH"
     - |
       HEAD_SHA=$(git rev-parse "origin/$CI_DEFAULT_BRANCH")
       if [ "$HEAD_SHA" = "$CI_COMMIT_SHA" ]; then
         echo "Guard OK — ${CI_COMMIT_TAG} is HEAD of ${CI_DEFAULT_BRANCH}"
+        echo "GUARD_OK=1" > guard.env
       else
         echo "Guard FAILED — tag not at HEAD"; exit 1
       fi
+  allow_failure: false
+  artifacts:
+    reports:
+      dotenv: guard.env
 
 create-release:
   stage: release
@@ -185,6 +193,9 @@ create-release:
     - if: '$CI_COMMIT_TAG =~ /^v(\d+)\.(\d+)\.(\d+)$/'
       when: always
     - when: never
+  before_script:
+    # Fail fast if guard didn't pass or guard job didn't produce the env
+    - '[ "${GUARD_OK:-}" = "1" ] || { echo "Guard not satisfied; aborting release."; exit 1; }'
   script:
     - echo "Running release job for $CI_COMMIT_TAG"
   release:
