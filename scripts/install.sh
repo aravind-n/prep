@@ -39,9 +39,10 @@ chmod +x "$TMP/$BIN_NAME"
 # Verify install dir access
 INSTALL_DIR="/usr/local/bin"
 if [ ! -w "$INSTALL_DIR" ]; then
-  echo "Unable to write to $INSTALL_DIR. Try re-installing with sudo"
+  echo "Unable to write to $INSTALL_DIR. Attempting with sudo"
+  sudo mv "$TMP/$BIN_NAME" "$INSTALL_DIR/$BIN_NAME"
+else
+  mv "$TMP/$BIN_NAME" "$INSTALL_DIR/$BIN_NAME"
 fi
-
-mv "$TMP/$BIN_NAME" "$INSTALL_DIR/$BIN_NAME"
 
 echo "$BIN_NAME installed to $INSTALL_DIR"
