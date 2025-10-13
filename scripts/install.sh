@@ -13,7 +13,7 @@ case "$OS" in
   linux*)   PLATFORM="linux-x86-64" ;;
   darwin*)
     if [[ "$ARCH" == "arm64" ]]; then
-      PLATFORM="macos-aarch64"
+      PLATFORM="macos-arm64"
     else
       PLATFORM="macos-x86"
     fi
