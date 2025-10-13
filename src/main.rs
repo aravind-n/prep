@@ -5,7 +5,7 @@ mod recipe;
 mod step;
 mod utils;
 
-use std::{env, fs, path::PathBuf};
+use std::{env, fs};
 
 use anyhow::Result;
 use clap::Parser;
@@ -26,13 +26,7 @@ fn main() -> Result<()> {
         to_stderr: !cli.log_to_stdout,
     })?;
 
-    let cmd = cli.cmd.unwrap_or(cli::Command::Run {
-        cookbook_path: PathBuf::from("./"),
-        recipe: None,
-        continue_on_error: false,
-    });
-
-    match cmd {
+    match cli.cmd {
         cli::Command::Init { path } => {
             utils::scaffold_cookbook_project(&path)?;
         }

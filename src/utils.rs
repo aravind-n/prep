@@ -66,13 +66,9 @@ pub fn scaffold_cookbook_project(path: &Path) -> Result<()> {
     // Create the required subdirectories.
     let recipes_dir = path.join("recipes");
     let scripts_dir = path.join("scripts");
-    let templates_dir = path.join("templates");
-    let assets_dir = path.join("assets");
 
     mkdir(&recipes_dir)?;
     mkdir(&scripts_dir)?;
-    mkdir(&templates_dir)?;
-    mkdir(&assets_dir)?;
 
     // Write files with clear context
     let writef = |p: PathBuf, contents: &str| -> Result<()> {

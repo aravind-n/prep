@@ -1,6 +1,6 @@
 # {}
 
-This is a new cookbook scaffolded by `prep`.
+This is a new cookbook scaffolded by [prep](https://gitlab.com/aravind/prep).
 
 ## Getting Started
 
@@ -32,9 +32,7 @@ prep run .
 
 The cookbook consists of the following
 
-- config.toml - Main configuration settings nfor the workbook. Includes global variables shared by all recipes
+- config.toml - Main configuration settings for the cookbook. Includes global variables shared by all recipes
 - recipes/ - All recipes used to build the cookbook
-- assets/ - Assets that are read-only. Recipes will not alter these files and will deploy them as is. Recipes may write new files to assets
-- scripts/ - User scripts that are used by recipes. useful when a single line command isn't enough for a task
-- templates/ - Template files that require per-user substitution. Recipes will use these files to generate an asset
+- scripts/ - Optional user scripts that are used by recipes. Useful when a single line command isn't enough for a task
 - README - General description about the cookbook
