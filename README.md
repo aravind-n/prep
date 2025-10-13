@@ -10,7 +10,25 @@ reproducible, version-controlled recipes.
 Setting up dev machines is slow and inconsistent. Teams want a dead-simple,
 reproducible way to execute a **set of commands** that may have **dependencies**
 
-## Features (v0.2.8)
+## Installation
+
+### Direct install
+
+```bash
+curl --proto '=https' --tlsv1.2 -fsSL https://aravind.gitlab.io/prep/install.sh | bash
+```
+
+### Build from source (requires Rust)
+
+This installs the prep binary into your Cargo bin path.
+
+```bash
+git clone https://gitlab.com/aravind/prep.git
+cd prep
+cargo install --path .
+```
+
+## Features (v0.3.2)
 
 - Scaffolds a new cookbook with
 - Runs an individual recipe
@@ -20,18 +38,7 @@ reproducible way to execute a **set of commands** that may have **dependencies**
 - Streams stdout/stderr live to your console
 - Rich logging support
 - Early exit logic in steps with `exit_on_success`
-
-## Installation
-
-Build from source (requires Rust):
-
-```bash
-git clone https://gitlab.com/aravind/prep.git
-cd prep
-cargo install --path .
-```
-
-This installs the prep binary into your Cargo bin path.
+- New installer script
 
 ## Usage
 
@@ -59,15 +66,20 @@ Options:
 
 ## Cookbook structure
 
-See the example cookbook
+Cookbooks are a collection of recipes that can be run together. For example,
+a dev machine setup cookbook can contain recipes that set up your language
+tools, IDEs, etc. At it's heart, each cookbook contains a `config.toml` file
+that describes the cookbook's characteristics and a `recipes` directory
+containing any recipes used to build the cookbook.
 
 ## Recipe Format
 
-A recipe is a TOML file describing environment variables and steps. An example can be found in ``example.toml``
+A recipe is a TOML file describing environment variables and steps. Each
+recipe contains a list of steps that define the actions that a recipe will
+take. You can look into example recipes by running `prep init` and inspecting
+the generated recipes.
 
 ## Future Work
 
 - Arrays for cmd in recipe.toml (maybe)
 - Windows support
-- Early exit in recipe
-- New name (because conflict. I like this name)
