@@ -33,10 +33,10 @@ impl Recipe {
     /// # Errors
     /// Returns an error if the file cannot be read or the TOML cannot
     /// be deserialized into a [`Recipe`].
-    pub fn new(recipe_path: PathBuf) -> Result<Self> {
+    pub fn new(recipe_path: &PathBuf) -> Result<Self> {
         info!(recipe = %recipe_path.display(), "Attempting to load recipe");
 
-        let raw_recipe = std::fs::read_to_string(&recipe_path)
+        let raw_recipe = std::fs::read_to_string(recipe_path)
             .with_context(|| format!("while reading recipe file: {}", recipe_path.display()))?;
 
         let recipe: Recipe =
@@ -57,10 +57,10 @@ impl Recipe {
         }
 
         println!("-> Plan for recipe: {}", self.name);
-        println!("   Depends on: [{}]", dependencies_str);
+        println!("   Depends on: [{dependencies_str}]");
 
         if let Some(description) = &self.description {
-            println!("   Description: {}", description);
+            println!("   Description: {description}");
         }
 
         for step in &self.steps {
@@ -182,11 +182,11 @@ mod tests {
         "#;
         let path = write_recipe_toml(&td, toml_src);
 
-        let r = Recipe::new(path).expect("should parse");
+        let r = Recipe::new(&path).expect("should parse");
         assert_eq!(r.name, "example");
         assert_eq!(r.description.as_deref(), Some("demo"));
         assert_eq!(r.depends_on, vec!["a".to_string(), "b".to_string()]);
-        assert_eq!(r.env.get("FOO").map(|s| s.as_str()), Some("bar"));
+        assert_eq!(r.env.get("FOO").map(String::as_str), Some("bar"));
         assert_eq!(r.steps.len(), 1);
         assert_eq!(r.steps[0].name, "noop");
         assert_eq!(r.steps[0].cmd, "true");

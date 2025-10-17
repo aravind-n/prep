@@ -104,7 +104,7 @@ impl Step {
         };
 
         let inner = Step::sh_single_quote(&self.cmd);
-        let after_login = format!("exec /bin/bash -c {}", inner);
+        let after_login = format!("exec /bin/bash -c {inner}");
 
         let mut command = Command::new(&user_shell);
 
@@ -150,7 +150,7 @@ impl Step {
 mod tests {
     use super::*;
 
-    pub fn build_step(name: &str, cmd: &str, os: Vec<&str>) -> Step {
+    pub fn build_step(name: &str, cmd: &str, os: &[&str]) -> Step {
         Step {
             name: name.into(),
             cmd: cmd.into(),
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn supports_os_when_not_restricted() {
-        let s = build_step("any", "echo ok", vec![]);
+        let s = build_step("any", "echo ok", &[]);
 
         assert!(s.supports_os("linux"));
         assert!(s.supports_os("macos"));
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn supports_os_only_matches_listed_values() {
-        let s = build_step("nix-only", "echo ok", vec!["linux", "macos"]);
+        let s = build_step("nix-only", "echo ok", &["linux", "macos"]);
         assert!(s.supports_os("linux"));
         assert!(s.supports_os("macos"));
         assert!(!s.supports_os("windows"));
@@ -203,20 +203,20 @@ mod tests {
         /// Escape a Rust string for safe inclusion inside a double-quoted
         /// POSIX shell string literal.
         fn sh_escape_double_quoted(s: &str) -> String {
-            s.replace('\\', r#"\\"#)
+            s.replace('\\', r"\\")
                 .replace('"', r#"\""#)
-                .replace('$', r#"\$"#)
+                .replace('$', r"\$")
         }
 
         #[test]
         fn run_success_returns_ok() {
-            let s = build_step("always-succeeds", "true", Vec::new());
+            let s = build_step("always-succeeds", "true", &[]);
             s.run(None).expect("should succeed");
         }
 
         #[test]
         fn run_failure_propagates_error() {
-            let s = build_step("fail_step", "exit 7", Vec::new());
+            let s = build_step("fail_step", "exit 7", &[]);
             let err = s.run(None).expect_err("should error for non-zero status");
             assert!(!format!("{err}").is_empty());
         }
@@ -237,8 +237,8 @@ mod tests {
 
             // The command succeeds only if MYVAR equals the expected string.
             // Using `test` so success/failure is purely via exit code.
-            let cmd = format!(r#"test "$MYVAR" = "{}""#, expected_escaped);
-            let s = build_step("pwd-env", &cmd, Vec::new());
+            let cmd = format!(r#"test "$MYVAR" = "{expected_escaped}""#);
+            let s = build_step("pwd-env", &cmd, &[]);
 
             s.run(Some(&envs)).expect("value should match expected");
         }
@@ -252,7 +252,7 @@ mod tests {
 
             // Succeeds only if EMPTYVAR is empty (unset or "")
             let cmd = r#"[ -z "${EMPTYVAR:-}" ]"#;
-            let s = build_step("empty-env", cmd, Vec::new());
+            let s = build_step("empty-env", cmd, &[]);
 
             s.run(Some(&envs)).expect("should be empty after expand");
         }

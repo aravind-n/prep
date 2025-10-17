@@ -8,7 +8,7 @@
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use anyhow::{Context, Result, bail, ensure};
@@ -69,11 +69,11 @@ impl Cookbook {
     /// # Errors
     /// Returns an error if configuration or any recipe file cannot
     /// be read or parsed.
-    pub fn new(cookbook_path: PathBuf) -> Result<Self> {
+    pub fn new(cookbook_path: &Path) -> Result<Self> {
         info!(cookbook = %cookbook_path.display(), "Attempting to load cookbook");
 
-        let config = Self::build_config(&cookbook_path)?;
-        let (recipes, recipe_to_id, id_to_recipe) = Self::build_recipe_maps(&cookbook_path)?;
+        let config = Self::build_config(cookbook_path)?;
+        let (recipes, recipe_to_id, id_to_recipe) = Self::build_recipe_maps(cookbook_path)?;
 
         let result = Self {
             name: config.name,
@@ -119,7 +119,7 @@ impl Cookbook {
         for entry in std::fs::read_dir(recipes_dir)? {
             let path = entry?.path();
             if path.extension().unwrap_or_default() == "toml" {
-                let recipe = Recipe::new(path)?;
+                let recipe = Recipe::new(&path)?;
                 let recipe_name = recipe.name.clone();
 
                 recipes.insert(recipe_name.clone(), recipe);
@@ -161,9 +161,8 @@ impl Cookbook {
                 continue;
             }
 
-            let &recipe_id = match self.recipe_to_id.get(recipe_name) {
-                Some(id) => id,
-                None => bail!("internal error: recipe `{recipe_name}` missing from recipe_to_id"),
+            let Some(&recipe_id) = self.recipe_to_id.get(recipe_name) else {
+                bail!("internal error: recipe `{recipe_name}` missing from recipe_to_id");
             };
 
             for dependency in &recipe.depends_on {
@@ -175,27 +174,19 @@ impl Cookbook {
                         "Dependency is excluded"
                     );
                     format!(
-                        "recipe `{}` depends on `{}` but that dependency is excluded",
-                        recipe_name, dependency
+                        "recipe `{recipe_name}` depends on `{dependency}` but that dependency is excluded"
                     )
                 });
 
-                let dependency_id = match self.recipe_to_id.get(dependency) {
-                    Some(id) => *id,
-                    None => {
-                        error!(
-                            cookbook = %self.name,
-                            recipe = %recipe_name,
-                            dependency = %dependency,
-                            "Dependency not found"
-                        );
+                let Some(&dependency_id) = self.recipe_to_id.get(dependency) else {
+                    error!(
+                        cookbook = %self.name,
+                        recipe = %recipe_name,
+                        dependency = %dependency,
+                        "Dependency not found"
+                    );
 
-                        bail!(
-                            "recipe `{}` declares unknown dependency `{}`",
-                            recipe_name,
-                            dependency
-                        );
-                    }
+                    bail!("recipe `{recipe_name}` declares unknown dependency `{dependency}`");
                 };
 
                 if included_ids.contains(&dependency_id) && included_ids.contains(&recipe_id) {
@@ -222,30 +213,22 @@ impl Cookbook {
             .build_graph()
             .context("while building execution graph for topological sort")?;
 
-        match toposort(&graph, None) {
-            Ok(order) => Ok(order),
-            Err(cycle) => {
-                let node_id = cycle.node_id();
-                let node_name = self
-                    .id_to_recipe
-                    .get(&node_id)
-                    .map(|s| s.as_str())
-                    .unwrap_or("unknown");
+        toposort(&graph, None).or_else(|cycle| {
+            let node_id = cycle.node_id();
+            let node_name = self
+                .id_to_recipe
+                .get(&node_id)
+                .map_or("unknown", String::as_str);
 
-                error!(
-                    cookbook = %self.name,
-                    node_id = %node_id,
-                    node = %node_name,
-                    "Circular dependency detected"
-                );
+            error!(
+                cookbook = %self.name,
+                node_id = %node_id,
+                node = %node_name,
+                "Circular dependency detected"
+            );
 
-                bail!(
-                    "circular dependency detected involving recipe `{}` (id {})",
-                    node_name,
-                    node_id
-                );
-            }
-        }
+            bail!("circular dependency detected involving recipe `{node_name}` (id {node_id})");
+        })
     }
 
     /// Prints a plan of the cookbook to stdout.
@@ -261,7 +244,7 @@ impl Cookbook {
 
         println!("{} v{} execution plan:", self.name, self.version);
         if let Some(description) = &self.description {
-            println!("Description: {description}\n")
+            println!("Description: {description}\n");
         }
 
         for recipe_id in sorted_recipe_ids {
@@ -311,7 +294,7 @@ impl Cookbook {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{fmt::Write, fs};
     use tempfile::tempdir;
 
     // Escape a Rust string for TOML basic string context.
@@ -323,7 +306,7 @@ mod tests {
     ///
     /// - `name`/`version` go into config.toml
     /// - `extra_env` goes under [env] in config.toml (e.g., OUTPUT path)
-    /// - `recipes` is (file_stem, depends_on, cmd)
+    /// - `recipes` is (`file_stem`, `[depends_on]`, cmd)
     fn write_cookbook(
         name: &str,
         version: &str,
@@ -343,7 +326,7 @@ description = "test cookbook"
 "#
         );
         for (k, v) in extra_env {
-            config.push_str(&format!(r#"{k} = "{}""#, toml_basic_escape(v)));
+            let _ = write!(config, r#"{k} = "{}""#, toml_basic_escape(v));
             config.push('\n');
         }
         fs::write(root.join("config.toml"), config).unwrap();
@@ -353,8 +336,7 @@ description = "test cookbook"
         fs::create_dir_all(&recipes_dir).unwrap();
 
         for (file_stem, deps, cmd) in recipes {
-            let mut toml_src = String::new();
-            toml_src.push_str(&format!(r#"name = "{file_stem}""#));
+            let mut toml_src = format!(r#"name = "{file_stem}""#);
             toml_src.push('\n');
 
             if !deps.is_empty() {
@@ -371,16 +353,16 @@ description = "test cookbook"
             }
 
             toml_src.push_str(
-                r#"
+                r"
 [[steps]]
-"#,
+",
             );
-            toml_src.push_str(&format!(r#"name = "step-{file_stem}""#));
+            let _ = write!(toml_src, r#"name = "step-{file_stem}""#);
             toml_src.push('\n');
 
             // 🔧 Escape the command for TOML basic string
-            let cmd_escaped = toml_basic_escape(cmd);
-            toml_src.push_str(&format!(r#"cmd = "{}""#, cmd_escaped));
+            let cmd_escaped = format!(r#"cmd = "{}""#, toml_basic_escape(cmd));
+            toml_src.push_str(&cmd_escaped);
             toml_src.push('\n');
 
             fs::write(recipes_dir.join(format!("{file_stem}.toml")), toml_src).unwrap();
@@ -398,11 +380,11 @@ description = "test cookbook"
             &[("a", &[], "true"), ("b", &["a"], "true")],
         );
 
-        let cb = Cookbook::new(td.path().to_path_buf()).expect("load cookbook");
+        let cb = Cookbook::new(td.path()).expect("load cookbook");
         assert_eq!(cb.name, "demo");
         assert_eq!(cb.version, "0.1.0");
         assert_eq!(cb.description.as_deref(), Some("test cookbook"));
-        assert_eq!(cb.env.get("FOO").map(|s| s.as_str()), Some("BAR"));
+        assert_eq!(cb.env.get("FOO").map(String::as_str), Some("BAR"));
         assert_eq!(cb.recipes.len(), 2);
         assert!(cb.recipes.contains_key("a"));
         assert!(cb.recipes.contains_key("b"));
@@ -421,7 +403,7 @@ description = "test cookbook"
                 ("c", &["b"], "true"),
             ],
         );
-        let cb = Cookbook::new(td.path().to_path_buf()).unwrap();
+        let cb = Cookbook::new(td.path()).unwrap();
 
         let order = cb.get_sorted_recipe_ids().expect("toposort ok");
 
@@ -447,7 +429,7 @@ description = "test cookbook"
             &[],
             &[("a", &["does-not-exist"], "true")],
         );
-        let cb = Cookbook::new(td.path().to_path_buf()).unwrap();
+        let cb = Cookbook::new(td.path()).unwrap();
         let err = cb
             .get_sorted_recipe_ids()
             .expect_err("should error on missing dep");
@@ -463,7 +445,7 @@ description = "test cookbook"
             &[],
             &[("a", &["b"], "true"), ("b", &["a"], "true")],
         );
-        let cb = Cookbook::new(td.path().to_path_buf()).unwrap();
+        let cb = Cookbook::new(td.path()).unwrap();
         let err = cb
             .get_sorted_recipe_ids()
             .expect_err("should error on cycle");
@@ -478,7 +460,7 @@ description = "test cookbook"
             &[],
             &[("a", &[], "true"), ("b", &["a"], "true")],
         );
-        let cb = Cookbook::new(td.path().to_path_buf()).unwrap();
+        let cb = Cookbook::new(td.path()).unwrap();
         cb.plan().expect("plan should succeed");
     }
 
@@ -506,7 +488,7 @@ description = "test cookbook"
             ],
         );
 
-        let cb = Cookbook::new(cookdir.path().to_path_buf()).unwrap();
+        let cb = Cookbook::new(cookdir.path()).unwrap();
         cb.run(false).expect("run should succeed");
 
         let contents = fs::read_to_string(out_file).expect("read out");

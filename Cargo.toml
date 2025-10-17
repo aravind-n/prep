@@ -1,7 +1,17 @@
 [package]
 name = "prep"
 version = "0.3.3"
+authors = ["Aravind Nidadavolu"]
+description = "A prep kitchen for your computer"
+repository = "https://gitlab.com/aravind/prep"
+license-file = "LICENSE"
+keywords = ["tools", "setup", "prep", "bootstrap"]
 edition = "2024"
+categories = ["command-line-utilities"]
+
+[lints.clippy]
+cargo = "warn"
+pedantic = "warn"
 
 [dependencies]
 anyhow = { version = "1.0.100", features = ["std", "backtrace"] }
@@ -12,7 +22,12 @@ serde = { version = "1.0.219", features = ["derive"] }
 shellexpand = "3.1.1"
 toml = "0.9.5"
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = ["json", "env-filter", "chrono", "ansi"] }
+tracing-subscriber = { version = "0.3.19", features = [
+    "json",
+    "env-filter",
+    "chrono",
+    "ansi",
+] }
 
 [dev-dependencies]
 tempfile = "3.22.0"

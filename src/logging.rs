@@ -112,7 +112,7 @@ macro_rules! finish_init {
 ///
 /// Returns an error if a global subscriber has already been initialized,
 /// or if subscriber initialization fails for another reason.
-pub fn init_tracing(config: LogConfig) -> Result<()> {
+pub fn init_tracing(config: &LogConfig) -> Result<()> {
     let is_tty = if config.to_stderr {
         std::io::stderr().is_terminal()
     } else {

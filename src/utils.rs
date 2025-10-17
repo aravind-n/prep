@@ -52,7 +52,7 @@ pub fn scaffold_cookbook_project(path: &Path) -> Result<()> {
     let cookbook_name = path
         .file_name()
         .and_then(|n| n.to_str())
-        .map(|s| s.to_owned())
+        .map(ToOwned::to_owned)
         .context("Cannot infer cookbook from path (invalid or empty last component")?;
 
     // Helper for directory creation with context

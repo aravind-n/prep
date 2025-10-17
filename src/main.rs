@@ -19,7 +19,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Initialize tracing with config from CLI
-    logging::init_tracing(LogConfig {
+    logging::init_tracing(&LogConfig {
         format: cli.log_format,
         no_ansi: cli.no_ansi,
         with_time: !cli.no_time,
@@ -31,7 +31,7 @@ fn main() -> Result<()> {
             utils::scaffold_cookbook_project(&path)?;
         }
         cli::Command::Plan { cookbook_path } => {
-            let cookbook = Cookbook::new(cookbook_path)?;
+            let cookbook = Cookbook::new(&cookbook_path)?;
             cookbook.plan()?;
         }
         cli::Command::Run {
@@ -42,7 +42,7 @@ fn main() -> Result<()> {
             if let Some(recipe_path) = recipe {
                 info!("Single recipe execution mode invoked");
 
-                let recipe = Recipe::new(recipe_path)?;
+                let recipe = Recipe::new(&recipe_path)?;
                 recipe.run(continue_on_error, None).inspect_err(|_| {
                     error!(recipe = recipe.name, "Recipe failed");
                 })?;
@@ -53,7 +53,7 @@ fn main() -> Result<()> {
                 env::set_current_dir(&cookbook_path)?;
 
                 // Run cookbook
-                let cookbook = Cookbook::new(cookbook_path)?;
+                let cookbook = Cookbook::new(&cookbook_path)?;
 
                 cookbook.run(continue_on_error).inspect_err(|_| {
                     error!(cookbook = %cookbook.name, "Cookbook failed");
