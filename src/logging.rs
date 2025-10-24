@@ -35,16 +35,18 @@ use tracing_subscriber::{
 ///
 /// This enum is exposed as a [`clap::ValueEnum`] so it can be parsed
 /// directly from CLI arguments.
-///
-/// - `Auto`: choose automatically based on TTY detection  
-/// - `Pretty`: human-readable logs  
-/// - `Compact`: shorter human-readable logs  
-/// - `Json`: structured logs suitable for ingestion by log processors
 #[derive(Clone, Debug, ValueEnum)]
 pub enum LogFormat {
+    ///Choose automatically based on TTY detection.
     Auto,
+
+    /// Human-readable logs.
     Pretty,
+
+    /// Shorter human-readable logs.
     Compact,
+
+    /// Structured logs suitable for ingestion by log processors.
     Json,
 }
 

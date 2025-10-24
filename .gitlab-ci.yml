@@ -249,6 +249,8 @@ pages:
     - apk add --no-cache bash
     - cp scripts/install.sh public/install.sh
     - chmod 644 public/install.sh
+    - export CRATE_NAME=$(grep '^name =' Cargo.toml | head -n 1 | awk -F'"' '{print $2}' | tr '-' '_')
+    - echo "<meta http-equiv=\"refresh\" content=\"0; url=${CRATE_NAME}/index.html\">" > public/index.html
   artifacts:
     paths:
       - public

@@ -23,11 +23,20 @@ use crate::recipe::Recipe;
 /// This is a helper struct used to initialize a cookbook
 #[derive(Debug, Deserialize)]
 struct CookbookConfig {
+    /// Name of the cookbook.
     name: String,
+
+    /// Version number of the cookbook.
     version: String,
+
+    /// Cookbook description.
     description: Option<String>,
+
+    /// Recipies to exclude in the cookbook.
     #[serde(default)]
     exclude: HashSet<String>,
+
+    /// Environment variables to use during cookbook execution.
     #[serde(default)]
     env: BTreeMap<String, String>,
 }
@@ -40,13 +49,31 @@ struct CookbookConfig {
 /// - Sorting recipes in dependency order,
 /// - Executing or planning recipes in the correct sequence.
 pub struct Cookbook {
+    /// Name of the cookbook.
     pub name: String,
+
+    /// Version number of the cookbook.
     pub version: String,
+
+    /// Cookbook description.
     pub description: Option<String>,
+
+    /// Recipies to exclude in the cookbook.
     pub exclude: HashSet<String>,
+
+    /// Environment variables to use during cookbook execution.
     pub env: BTreeMap<String, String>,
+
+    /// Map of recipe names to [`Recipe`] instances.
+    /// [`BTreeMap`] is uses since it retains insertion order.
     pub recipes: BTreeMap<String, Recipe>,
+
+    /// Map of names of recipes to a recipe ID.
+    /// Used internally to generate the DAG and get execution order.
     recipe_to_id: HashMap<String, u32>,
+
+    /// Map of recipe IDs to recipe names.
+    /// Used internally to retrieve recipes after they have been sorted by the DAG
     id_to_recipe: HashMap<u32, String>,
 }
 

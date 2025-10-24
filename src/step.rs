@@ -12,19 +12,22 @@ use tracing::{error, info};
 
 /// A step in a recipe.
 ///
-/// Runs a shell command
-///
-/// # Fields
-/// - `name`: Identifier for the step, used in logs.
-/// - `cmd`: The shell command to execute.
-/// - `os`: Optional list of supported OS names (`"macos"`, `"linux"`, `"windows"`).
-///   If empty, the step runs on all operating systems.
+/// Contains the command to execute, post-execution behavior,
+/// and other information for a recipe to function.
 #[derive(Debug, Deserialize)]
 pub struct Step {
+    /// Name of the step.
     pub name: String,
+
+    /// Shell command to execute.
     pub cmd: String,
+
+    /// List of supported OS names (`"macos"`, `"linux"`, `"windows"`).
     #[serde(default)]
     pub os: Vec<String>,
+
+    /// Flag determining if the recipe should end upon successful completion of a step.
+    /// Useful when a step can be used as a test.
     #[serde(default)]
     pub exit_on_success: bool,
 }

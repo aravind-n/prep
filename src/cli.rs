@@ -16,6 +16,8 @@ use crate::logging::LogFormat;
 #[command(name = "prep", version, propagate_version = true)]
 #[command(subcommand_required = true, arg_required_else_help = true)]
 pub struct Cli {
+    /// The command to be executed by the program.
+    /// Can be one of `init`, `plan`, or `run`.
     #[command(subcommand)]
     pub cmd: Command,
 

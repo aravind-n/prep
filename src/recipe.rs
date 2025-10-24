@@ -18,12 +18,21 @@ use crate::{step::Step, utils};
 /// a plan via [`plan`](Recipe::plan).
 #[derive(Debug, Deserialize)]
 pub struct Recipe {
+    /// Name of the recipe.
     pub name: String,
+
+    /// Recipe description.
     pub description: Option<String>,
+
+    /// List of recipes that this recipe depends on.
     #[serde(default)]
     pub depends_on: Vec<String>,
+
+    /// Environment variables to use during recipe execution.
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+
+    /// List of steps to perform for this recipe.
     pub steps: Vec<Step>,
 }
 
