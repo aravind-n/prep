@@ -22,11 +22,11 @@ jobs:
             platform: macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --workspace --release --locked
       - run: cp target/release/prep prep-${{ matrix.platform }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: prep-${{ matrix.platform }}
           path: prep-${{ matrix.platform }}
@@ -36,14 +36,14 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Require the tag to point to the head of master
         run: |
           git fetch origin master
           test "$(git rev-parse origin/master)" = "$GITHUB_SHA"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
