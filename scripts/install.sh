@@ -21,16 +21,10 @@ case "$OS" in
   *) echo "Unsupported OS: $OS"; exit 1 ;;
 esac
 
-# Find latest tag (vX.Y.Z)
-TAG=$(curl -fsSL "https://gitlab.com/api/v4/projects/$(echo "$REPO" | sed 's|/|%2F|')/releases" \
-      | grep -m1 -oE '"tag_name":"v[0-9]+\.[0-9]+\.[0-9]+"' \
-      | head -1 | cut -d':' -f2 | tr -d '"')
+echo "Installing the latest $BIN_NAME release for $PLATFORM..."
 
-[ -n "$TAG" ] || { echo "Could not determine latest version"; exit 1; }
-
-echo "Installing $BIN_NAME $TAG for $PLATFORM..."
-
-URL="https://gitlab.com/$REPO/-/releases/$TAG/downloads/binaries/$TAG/${BIN_NAME}-${PLATFORM}"
+# GitHub redirects this stable URL to the matching asset in the latest release.
+URL="https://github.com/$REPO/releases/latest/download/${BIN_NAME}-${PLATFORM}"
 
 TMP="$(mktemp -d)"
 curl -fsSL "$URL" -o "$TMP/$BIN_NAME"

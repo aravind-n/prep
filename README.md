@@ -15,7 +15,7 @@ reproducible way to execute a **set of commands** that may have **dependencies**
 ### Direct install
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://aravind.gitlab.io/prep/install.sh | bash
+curl --proto '=https' --tlsv1.2 -fsSL https://aravind-n.github.io/prep/install.sh | bash
 ```
 
 ### Build from source (requires Rust)
@@ -23,7 +23,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://aravind.gitlab.io/prep/install.sh 
 This installs the prep binary into your Cargo bin path.
 
 ```bash
-git clone https://gitlab.com/aravind/prep.git
+git clone https://github.com/aravind-n/prep.git
 cd prep
 cargo install --path .
 ```

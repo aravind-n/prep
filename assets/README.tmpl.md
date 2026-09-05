@@ -1,6 +1,6 @@
 # {}
 
-This is a new cookbook scaffolded by [prep](https://gitlab.com/aravind/prep).
+This is a new cookbook scaffolded by [prep](https://github.com/aravind-n/prep).
 
 ## Getting Started
 
