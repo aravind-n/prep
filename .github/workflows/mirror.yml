@@ -31,4 +31,4 @@ jobs:
           git -C repo.git push --prune \
             "git@gitlab.com:aravind/prep.git" \
             "+refs/heads/master:refs/heads/master" \
-            "+refs/tags/v*.*.*:refs/tags/v*.*.*"
+            "+refs/tags/v*:refs/tags/v*"
