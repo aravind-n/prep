@@ -10,7 +10,13 @@ OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
 
 case "$OS" in
-  linux*)   PLATFORM="linux-x86-64" ;;
+  linux*)
+    if [[ "$ARCH" == "x86_64" ]]; then
+      PLATFORM="linux-x86-64"
+    else
+      echo "Unsupported architecture for $OS: $ARCH"; exit 1
+    fi
+    ;;
   darwin*)
     if [[ "$ARCH" == "arm64" ]]; then
       PLATFORM="macos-arm64"
