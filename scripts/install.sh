@@ -30,8 +30,15 @@ TMP="$(mktemp -d)"
 curl -fsSL "$URL" -o "$TMP/$BIN_NAME"
 chmod +x "$TMP/$BIN_NAME"
 
-# Verify install dir access
 INSTALL_DIR="/usr/local/bin"
+
+# Not present on a stock macOS install, so create it before the move.
+if [ ! -d "$INSTALL_DIR" ]; then
+  echo "Creating $INSTALL_DIR..."
+  mkdir -p "$INSTALL_DIR" 2>/dev/null || sudo install -d -m 755 "$INSTALL_DIR"
+fi
+
+# Verify install dir access
 if [ ! -w "$INSTALL_DIR" ]; then
   echo "Unable to write to $INSTALL_DIR. Attempting with sudo"
   sudo mv "$TMP/$BIN_NAME" "$INSTALL_DIR/$BIN_NAME"
