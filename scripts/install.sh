@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-REPO="aravind/prep"
+REPO="aravind-n/prep"
 BIN_NAME="prep"
 
 # Determine OS / Arch
