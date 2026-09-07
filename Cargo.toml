@@ -1,6 +1,6 @@
 [package]
 name = "prep"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["Aravind Nidadavolu"]
 description = "A prep kitchen for your computer"
 repository = "https://github.com/aravind-n/prep"
