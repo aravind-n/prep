@@ -460,7 +460,7 @@ description = "test cookbook"
         let err = cb
             .get_sorted_recipe_ids()
             .expect_err("should error on missing dep");
-        assert!(!format!("{err}").is_empty());
+        assert_ne!(format!("{err}"), "");
     }
 
     #[test]
@@ -476,7 +476,7 @@ description = "test cookbook"
         let err = cb
             .get_sorted_recipe_ids()
             .expect_err("should error on cycle");
-        assert!(!format!("{err}").is_empty());
+        assert_ne!(format!("{err}"), "");
     }
 
     #[test]

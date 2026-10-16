@@ -359,7 +359,7 @@ mod tests {
             };
 
             let err = r.run(false, None).expect_err("should stop on first error");
-            assert!(!format!("{err}").is_empty());
+            assert_ne!(format!("{err}"), "");
         }
 
         #[test]
