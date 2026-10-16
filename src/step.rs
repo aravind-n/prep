@@ -221,7 +221,7 @@ mod tests {
         fn run_failure_propagates_error() {
             let s = build_step("fail_step", "exit 7", &[]);
             let err = s.run(None).expect_err("should error for non-zero status");
-            assert!(!format!("{err}").is_empty());
+            assert_ne!(format!("{err}"), "");
         }
 
         #[test]
