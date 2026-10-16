@@ -40,7 +40,7 @@ pub(crate) fn host_os() -> &'static str {
 ///
 /// - Creates and writes files/directories on the local filesystem.
 /// - Executes the `git` command if available on `PATH`.
-/// - On Unix platforms, sets executable permission (`0o755`) on `scripts/example-script.sh`.
+/// - On Unix platforms, sets executable permission (`0o755`) on `run.sh` and `scripts/example-script.sh`.
 pub fn scaffold_cookbook_project(path: &Path) -> Result<()> {
     info!(path = %path.display(), "Attempting to initialize new cookbook");
 
@@ -83,6 +83,10 @@ pub fn scaffold_cookbook_project(path: &Path) -> Result<()> {
     let config_toml = build_template(include_str!("../assets/config.tmpl.toml"), &cookbook_name);
     writef(path.join("config.toml"), &config_toml)?;
 
+    // Create run.sh at root
+    let run_sh_path = path.join("run.sh");
+    writef(run_sh_path.clone(), include_str!("../assets/run.sh"))?;
+
     // Create example.toml
     writef(
         recipes_dir.join("example.toml"),
@@ -95,20 +99,22 @@ pub fn scaffold_cookbook_project(path: &Path) -> Result<()> {
         script_path.clone(),
         include_str!("../assets/recipe-script.sh"),
     )?;
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&script_path)
-            .with_context(|| format!("reading metadata for `{}`", script_path.display()))?
-            .permissions();
+        let set_executable = |p: &Path| -> Result<()> {
+            let mut perms = fs::metadata(p)
+                .with_context(|| format!("reading metadata for `{}`", p.display()))?
+                .permissions();
 
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).with_context(|| {
-            format!(
-                "setting executable permissions on `{}`",
-                script_path.display()
-            )
-        })?;
+            perms.set_mode(0o755);
+            fs::set_permissions(p, perms)
+                .with_context(|| format!("setting executable permissions on `{}`", p.display()))
+        };
+
+        set_executable(&run_sh_path)?;
+        set_executable(&script_path)?;
     }
 
     // Create script_example.toml
@@ -153,4 +159,57 @@ pub fn scaffold_cookbook_project(path: &Path) -> Result<()> {
 /// - `var`: The replacement value (typically the cookbook name).
 fn build_template(contents: &str, var: &str) -> String {
     contents.replace("{}", var)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn scaffold_cookbook_project_creates_all_files_including_run_sh() {
+        let temp = tempdir().expect("failed to create temp dir");
+        let cookbook_dir = temp.path().join("test_cookbook");
+
+        scaffold_cookbook_project(&cookbook_dir).expect("scaffolding should succeed");
+
+        assert!(cookbook_dir.join("README.md").is_file());
+        assert!(cookbook_dir.join("config.toml").is_file());
+        assert!(cookbook_dir.join("run.sh").is_file());
+        assert!(cookbook_dir.join("recipes").join("example.toml").is_file());
+        assert!(
+            cookbook_dir
+                .join("recipes")
+                .join("scripts-example.toml")
+                .is_file()
+        );
+        assert!(
+            cookbook_dir
+                .join("scripts")
+                .join("example-script.sh")
+                .is_file()
+        );
+        assert!(cookbook_dir.join(".git").exists());
+
+        let run_sh_content =
+            fs::read_to_string(cookbook_dir.join("run.sh")).expect("failed to read run.sh");
+        assert_eq!(run_sh_content, include_str!("../assets/run.sh"));
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = fs::metadata(cookbook_dir.join("run.sh")).expect("reading metadata");
+            assert_eq!(metadata.permissions().mode() & 0o777, 0o755);
+        }
+    }
+
+    #[test]
+    fn scaffold_cookbook_project_fails_if_directory_already_exists() {
+        let temp = tempdir().expect("failed to create temp dir");
+        let cookbook_dir = temp.path().join("existing_cookbook");
+        fs::create_dir_all(&cookbook_dir).expect("failed to create existing dir");
+
+        let result = scaffold_cookbook_project(&cookbook_dir);
+        assert!(result.is_err());
+    }
 }
